@@ -14,6 +14,11 @@ cv::Mat toGray(const cv::Mat& bgr);
 // "no built-in content-aware functions" rule is clearly respected.
 cv::Mat computeEnergy(const cv::Mat& gray, EnergyType type);
 
+// Recomputes energy[row, c0..c1] (clamped to the image) from `gray` with exactly the same
+// per-pixel formula as computeEnergy. Used for incremental updates after a seam removal.
+void updateEnergyRegion(const cv::Mat& gray, EnergyType type, cv::Mat& energy,
+                        int row, int c0, int c1);
+
 // Forward-energy transition costs (Rubinstein et al. 2008) for pixel (r, c) of `gray`:
 //   CU = |I(r, c+1) - I(r, c-1)|                       (always paid)
 //   CL = CU + |I(r-1, c) - I(r, c-1)|                  (arrived from up-left)

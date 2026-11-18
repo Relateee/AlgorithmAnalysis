@@ -5,6 +5,7 @@
 
 #include <opencv2/imgproc.hpp>
 
+#include <algorithm>
 #include <stdexcept>
 #include <cstring>
 
@@ -44,6 +45,8 @@ cv::Mat Carver::removeSeams(const cv::Mat& bgr, int count, Orientation o) {
     const int dimension = o == Orientation::Vertical ? bgr.cols : bgr.rows;
     if (count < 0 || count >= dimension)
         throw std::invalid_argument("Seam count must be nonnegative and leave at least one pixel.");
+    if (incremental_)
+        return removeSeamsIncremental(bgr, count, o);
     cv::Mat img = bgr.clone();
     for (int i = 0; i < count; ++i) {
         const Seam seam = findSeam(img, o);
@@ -58,6 +61,59 @@ cv::Mat Carver::removeSeams(const cv::Mat& bgr, int count, Orientation o) {
         }
         stats_.msRemove += t.ms();
         ++stats_.seamsRemoved;
+    }
+    return img;
+}
+
+// Same loop as removeSeams, but gray and energy are kept and patched after every removal.
+// Both filters read only the 3x3 window around a pixel (Gradient a +-1 cross, Sobel the full
+// block). After removing seam s, new pixel (r, c) sees the same window as before unless a
+// removed pixel fell inside it, i.e. unless s[r'] lies in [c, c+1] for some r' in r-1..r+1.
+// So in row r only columns [lo-1, hi] can change, where lo/hi are the min/max seam column over
+// rows r-1..r+1. Replicated borders need no extra care: clamping is unchanged by the removal.
+// Everything else keeps its energy (just shifted left with the image).
+cv::Mat Carver::removeSeamsIncremental(const cv::Mat& bgr, int count, Orientation o) {
+    // Horizontal seams are vertical seams of the transposed image; stay transposed for the loop.
+    cv::Mat img;
+    if (o == Orientation::Horizontal)
+        cv::transpose(bgr, img);
+    else
+        img = bgr.clone();
+
+    Timer t;
+    cv::Mat gray   = toGray(img);
+    cv::Mat energy = computeEnergy(gray, energy_);
+    stats_.msEnergy += t.ms();
+
+    for (int i = 0; i < count; ++i) {
+        t.reset();
+        const Seam seam = finder_->findVerticalSeam({energy, gray});
+        CV_Assert(isValidSeam(seam, img.rows, img.cols));
+        stats_.msFind += t.ms();
+        stats_.totalSeamCost += seamCost(energy, seam);
+
+        t.reset();
+        img    = removeVerticalSeam(img, seam);
+        gray   = removeVerticalSeam(gray, seam);
+        energy = removeVerticalSeam(energy, seam);
+        stats_.msRemove += t.ms();
+
+        t.reset();
+        const int rows = img.rows;
+        for (int r = 0; r < rows; ++r) {
+            int lo = seam[r], hi = seam[r];
+            if (r > 0) { lo = std::min(lo, seam[r - 1]); hi = std::max(hi, seam[r - 1]); }
+            if (r + 1 < rows) { lo = std::min(lo, seam[r + 1]); hi = std::max(hi, seam[r + 1]); }
+            updateEnergyRegion(gray, energy_, energy, r, lo - 1, hi);
+        }
+        stats_.msEnergy += t.ms();
+        ++stats_.seamsRemoved;
+    }
+
+    if (o == Orientation::Horizontal) {
+        cv::Mat out;
+        cv::transpose(img, out);
+        return out;
     }
     return img;
 }

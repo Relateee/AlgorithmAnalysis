@@ -13,7 +13,8 @@ lowest cost in the final row returns one connected pixel per row. Equal costs se
 the leftmost predecessor and final column deterministically.
 
 `Carver.cpp` removes each selected pixel by copying the remaining pixels in that row.
-It recomputes the energy map and seam after every removal. Horizontal finding transposes
+It recomputes the energy map and seam after every removal (an optional incremental mode
+updates only the energy next to the removed seam; section 5.3). Horizontal finding transposes
 the image and reuses the vertical algorithm; horizontal removal transposes back afterward.
 Resizing removes all requested vertical seams, then all requested horizontal seams.
 Targets must be positive and no larger than the original. These operations shrink images;
@@ -34,7 +35,8 @@ the sum of backward pixel energies, including when forward mode is enabled.
 Validation includes exhaustive enumeration on small maps, both energy filters,
 horizontal and vertical seams, exact retained pixels, boundary cases and a controlled
 test that verifies energy is recalculated after each removal. See `tests/src/q1.cpp`.
-Multi-threading and the improvements discussion (section 5) still require work.
+Multi-threaded DP and incremental energy updates are implemented (section 5), tested in
+`tests/src/q5_threads.cpp` and `tests/src/q5_energy.cpp`.
 
 ### Greedy (Question 3)
 `GreedySeamFinder.cpp` starts at the lowest-energy pixel of the top row and, in every
@@ -143,8 +145,11 @@ values; it does not use divide and conquer or FFTs.
 | Greedy, all starts | O(HW) | O(kHW) | O(H) |
 | Graph cut (Edmonds–Karp) | O(VE^2) = O((HW)^3) worst case | O(k(HW)^3) | O(HW): about 6HW edge records |
 | Graph cut (Dinic) | O(V^2 E) = O((HW)^3) worst case; measured growth about (HW)^1.6 | O(k(HW)^3) | O(HW), same graph |
+| DP, multi-threaded (p threads) | O(HW/p) work per thread + H barrier waits | O(kHW/p + kH·sync) | as DP |
+| Incremental energy update | O(H) | O(kH), but O(kHW) overall because removal copies the image | as energy map |
 
-For graph cut, V = HW + 2 and E = Θ(HW): each pixel has at most one right edge and two
+For the incremental energy update, a seam moves at most one column per row, so over rows r-1 to
+r+1 the band [lo-1, hi] spans at most 4 columns: O(1) pixels per row. For graph cut, V = HW + 2 and E = Θ(HW): each pixel has at most one right edge and two
 diagonals, each stored with a residual twin, plus the source and sink edges. Because the graph
 is sparse, the general bounds O(VE^2) for Edmonds-Karp and O(V^2 E) for Dinic both become
 O(V^3) = O((HW)^3) per seam.
@@ -155,7 +160,6 @@ touches one pixel per row, and H grows like (HW)^0.5 at a fixed aspect ratio) an
 with Dinic 1.63. Max-flow is far below its worst case on these grids, but clearly superlinear.
 
 ## 4. Comparison: DP vs Greedy vs Graph Cut
-<!-- Seam cost, visual quality (images from results/), running time graphs from results/bench.csv. -->
 
 ### 4.1 DP vs Greedy (Question 3)
 Measured with the Release build: 100 vertical seams removed, Gradient energy, two Windows
@@ -170,17 +174,18 @@ wallpapers scaled to three widths. Raw data and images are in `results/q3/`.
 | img102 (sunset) | 400x250 | 214.8 | 101.0 | 110.7 | 0.40 | 56,706 | 124,007 |
 | img102 (sunset) | 800x500 | 866.7 | 390.6 | 472.0 | 2.35 | 62,771 | 191,015 |
 
-Observations (draft, to be written up):
-- Finding a seam is about 120-280x faster with greedy (O(H) vs O(HW)), but the whole carve is only
-  about 2x faster, because recomputing the O(HW) energy map after every removal dominates.
-- Greedy seams cost 1.7-3.7x more energy, and the gap grows with image size: more rows give
-  more chances to be led into an expensive region.
-- Visually (`img102-original-dp-greedy.png`), DP keeps the left mountain and the sun intact
-  while greedy squashes the mountain.
-- Lower energy is not always better-looking: on `img100` DP concentrates seams along the
+Observations:
+- **Greedy finds seams much faster, but carving is only about 2x faster.** Finding a seam is
+  about 120-280x faster with greedy (O(H) vs O(HW)). The whole carve, however, is only about 2x
+  faster, because recomputing the O(HW) energy map after every removal dominates.
+- **Greedy seams cost 1.7-3.7x more energy, and the gap grows with image size.** More rows give
+  greedy more chances to be led into an expensive region.
+- **DP keeps the left mountain and the sun intact, while greedy squashes the mountain**
+  (`img102-original-dp-greedy.png`).
+- **Lower energy is not always better-looking.** On `img100`, DP concentrates seams along the
   curved edges and leaves staircase artifacts, while greedy happens to look smoother.
-  Backward energy ignores the new edges created by a removal; forward energy is designed
-  to fix exactly this (worth showing as an improvement in section 5).
+- **Backward energy ignores new edges.** Backward energy ignores the new edges created by a
+  removal. Forward energy is designed to fix exactly this; see section 5.3.
 
 ### 4.2 DP vs Graph cut (Question 4)
 Measured with g++ 13.3 `-O2` on Linux (2-core Xeon, 2.1 GHz): 30 vertical seams removed,
@@ -215,11 +220,114 @@ Observations:
   costs orders of magnitude more time. Its value is generality: Rubinstein et al. (2008) use a
   min-cut construction for video, where a seam becomes a connected surface through all frames
   and the row-by-row DP recurrence no longer applies.
+- **Edmonds-Karp vs Dinic.** Same costs, and Dinic is about 3x faster per seam on this machine:
+  50x34 EK 5.54 vs Dinic 1.89 ms/seam (2.9x), 75x51 25.05 vs 8.26 (3.0x), 100x68 61.20 vs 19.53
+  (3.1x). Costs are identical (5542, 5865, 5897). Data: `docs/data/q5-maxflow.csv` (10 seams, the
+  Windows machine of section 5).
 
 ## 5. Improvements
+Setup for all measurements in this section: Windows, AMD Ryzen 7 5800X3D (8 cores, 16 threads),
+MSVC Release build, `seam_bench` on `assets/images/tower.jpg`. Sizes above 274 px are upscaled
+(INTER_AREA), so they are smoother than native photos. Each number is the median of 3 runs.
+Summary data is in `docs/data/q5-*.csv`; raw runs are in `results/q5/`. Run-to-run variation is
+about 10% (for example, 1600x1086 DP with one thread found a seam in 18.66 ms/seam in the threads
+experiment and 16.70 ms/seam in the rolling experiment), so differences under about 10% are
+within noise.
+
 ### 5.1 Do we need the entire DP table?
+No, not for the costs. Row i depends only on row i-1, so two cost rows (O(W) memory) are enough.
+This is implemented as `DPOptions::rollingRows`. The parent table is still O(HW), because
+backtracking needs the chosen predecessor of every pixel in every row.
+
+DP, 1 thread, 20 seams, Gradient energy:
+
+| Size | Full find (ms/seam) | Rolling find (ms/seam) | Full memory (MB) | Rolling memory (MB) |
+|---|---|---|---|---|
+| 400x272 | 1.24 | 1.10 | 1.31 | 0.44 |
+| 800x543 | 3.91 | 3.52 | 5.21 | 1.75 |
+| 1600x1086 | 16.70 | 13.39 | 20.85 | 6.98 |
+| 3200x2172 | 67.88 | 55.71 | 83.40 | 27.85 |
+
+The full table needs 8HW bytes for double costs plus 4HW for int parents, about 12HW in total.
+Rolling rows need 16W + 4HW, about 3x less at every size shown. Rolling rows were 11-25% faster,
+probably because the smaller working set fits the cache better, but the gains at the smaller sizes
+are at the noise level. Total seam costs are identical (for example 18,119 at 400x272 with either
+method), and the seams are identical (tests).
+
+Further reductions are not implemented. Storing each parent as a 1-byte offset (-1, 0, +1) instead
+of a 4-byte int would cut the parent table 4x. Alternatively, a Hirschberg-style divide and conquer
+could avoid the parent table entirely by recomputing costs, giving O(W) memory for roughly
+O(HW log H) time.
+
 ### 5.2 Does multi-threading help?
-### 5.3 Other improvements (local energy updates, forward energy, ...)
+Rows depend on the previous row, so the rows stay sequential. Within a row, the columns are split
+into contiguous blocks, one per thread. Threads are created once per seam and meet at a
+`std::barrier` after every row (`core/src/DPSeamFinder.cpp`). One barrier per row is enough even
+with rolling rows, because buffer r%2 is only overwritten two rows later. Seams are identical to
+the single-thread result (960 test cases plus a race stress test).
+
+DP, Gradient, 20 seams, find time per seam in ms (speed-up relative to 1 thread):
+
+| Size | 1 thread | 2 threads | 4 threads | 8 threads | 16 threads |
+|---|---|---|---|---|---|
+| 400x272 | 1.30 | 1.22 (1.07x) | 1.71 (0.76x) | 5.34 (0.24x) | 10.27 (0.13x) |
+| 800x543 | 4.91 | 5.51 (0.89x) | 5.40 (0.91x) | 10.70 (0.46x) | 15.74 (0.31x) |
+| 1600x1086 | 18.66 | 17.22 (1.08x) | 15.59 (1.20x) | 22.81 (0.82x) | 30.03 (0.62x) |
+| 3200x2172 | 74.84 | 47.19 (1.59x) | 46.69 (1.60x) | 58.00 (1.29x) | 66.78 (1.12x) |
+
+Each row is only W cells of very cheap work (three comparisons), but every row costs one barrier
+synchronisation of all threads, H times per seam. Only at 3200 px wide is a row long enough to
+amortise that cost, and even there the best result is 1.6x with 2-4 threads. More threads add
+synchronisation cost, and 16 threads run on SMT siblings of the 8 cores.
+
+The whole-carve gain is smaller still. At 3200 px, total time falls from 3388.6 ms (1 thread) to
+2620.1 ms (4 threads), about 1.3x, because energy computation and removal are not threaded
+(Amdahl's law).
+
+Conclusion: multi-threading the DP recurrence does not pay off at normal image sizes. Better
+targets would be the energy map, where every pixel is independent and no per-row barrier is
+needed, or running independent work in parallel, such as the vertical and horizontal candidates.
+Neither is implemented.
+
+### 5.3 Other improvements
+**(i) Local (incremental) energy updates.** Enabled with `Carver::setIncrementalEnergy`. Both
+filters read only a pixel's 3x3 window. After a seam is removed, only columns [lo-1, hi] of row r
+can change, where lo and hi are the minimum and maximum seam column over rows r-1 to r+1. The rest
+of the energy map is shifted along with the image. The energy maps are bit-identical to full
+recomputation (`tests/src/q5_energy.cpp`: 4512 cases, 16608 removals), and seam costs are identical
+in every benchmark row.
+
+50 seams, times in ms, off -> on:
+
+| Algorithm | Energy | Size | Energy time | Total time | Speed-up (total) |
+|---|---|---|---|---|---|
+| DP | Gradient | 400x272 | 69.14 -> 1.94 | 137.5 -> 78.0 | 1.8x |
+| DP | Gradient | 1600x1086 | 996.2 -> 22.6 | 1942.9 -> 1053.7 | 1.8x |
+| Greedy | Gradient | 400x272 | 66.21 -> 2.00 | 74.50 -> 19.31 | 3.9x |
+| Greedy | Gradient | 1600x1086 | 965.2 -> 21.1 | 1024.3 -> 207.6 | 4.9x |
+| DP | Sobel | 1600x1086 | 1841.0 -> 41.5 | 2757.4 -> 1061.3 | 2.6x |
+| Greedy | Sobel | 1600x1086 | 1873.6 -> 41.4 | 1932.2 -> 235.3 | 8.2x |
+
+The full tables are in `docs/data/q5-incremental_gradient.csv` and `docs/data/q5-incremental_sobel.csv`.
+Energy time falls by roughly 24-46x across the sizes measured. Greedy gains most, because energy
+was almost all of its time (section 4.1). Removal time rises, because three maps (image, gray and
+energy) are copied per seam instead of one. Asymptotically each seam is still O(HW), because
+removal copies the image; the improvement is a constant factor.
+
+**(ii) Forward energy** (Rubinstein et al. 2008). Enabled with `DPOptions::forwardEnergy`. It
+charges the new edges that appear when neighbours become adjacent after a removal (the CL, CU and
+CR costs). On the 274x186 tower with 80 seams, find time rises from 0.539 to 0.862 ms/seam (1.6x
+slower), and total time from 93.9 to 118.0 ms. Seam costs measure a different objective, so they
+are not comparable.
+
+![Tower: original, 80 seams removed with backward and with forward energy](figures/q5-tower-backward-vs-forward.png)
+
+On this image both versions keep the tower and the person intact, and the results look very
+similar. The difference is expected on images with curved or diagonal edges, such as the staircase
+artifacts on img100 noted in section 4.1. Those were not re-measured here.
+
+**(iii) Not implemented.** Choosing the optimal order of vertical and horizontal removals with a
+second DP (Avidan and Shamir, 2007), and seam insertion for enlarging images.
 
 ## References
 - S. Avidan, A. Shamir. *Seam Carving for Content-Aware Image Resizing.* SIGGRAPH 2007.

@@ -95,3 +95,18 @@ in the viewer, run the DP / greedy / graph-cut measurements and write sections 1
 missing Question 4 graph cut and max-flow work after a review of the assignment against the
 brief and rubric) and "can u remove all that my assignment doesnt ask for" (which removed
 extras beyond the brief and switched to the brief's exact graph construction).
+
+Question 5 (added 2026-11-19): AI assistance was used through Claude Code with a multi-agent
+workflow: developer, tester and reviewer agents on Sonnet, doc-writer and file-search agents on
+Haiku, coordinated by a main agent. It was used to implement multi-threaded DP (row
+synchronisation with `std::barrier`) and incremental energy updates, write
+`tests/src/q5_threads.cpp` and `tests/src/q5_energy.cpp`, add the benchmark flags, run the
+section 5 measurements, and write report sections 4.1 (prose), 5.1-5.3 and the Edmonds-Karp vs
+Dinic comparison. Reviewer agents checked each change, and all tests were re-run by the main
+agent. Main prompts: "Create an agentic workflow ... Review the information in docs file and code
+and create a task list", "start the pipeline on T1–T4 in parallel", and "compare the new commit
+made by teamate to Q4, see what is done on task list, then work on Q5 until done". An independent
+max-flow implementation and test suite were also written in parallel to the teammate's Question 4
+commit; the teammate's committed version was kept.
+
+The team must review and adapt this record before submission.

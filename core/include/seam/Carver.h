@@ -36,6 +36,11 @@ public:
     // Resize to (targetWidth, targetHeight), both <= current size.
     cv::Mat resize(const cv::Mat& bgr, int targetWidth, int targetHeight);
 
+    // Q5: keep image/gray/energy across iterations and recompute energy only near the removed
+    // seam. Output is identical to the full recompute; default off.
+    void setIncrementalEnergy(bool on) { incremental_ = on; }
+    bool incrementalEnergy() const { return incremental_; }
+
     const CarveStats& stats() const { return stats_; }
     void resetStats() { stats_ = {}; }
 
@@ -50,6 +55,9 @@ private:
     std::unique_ptr<SeamFinder> finder_;
     EnergyType                  energy_;
     CarveStats                  stats_;
+    bool                        incremental_ = false;
+
+    cv::Mat removeSeamsIncremental(const cv::Mat& bgr, int count, Orientation o);
 };
 
 } // namespace seam

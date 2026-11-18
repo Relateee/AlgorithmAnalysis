@@ -2,6 +2,11 @@
 //
 //   seam_bench [--image path] [--out file.csv] [--seams N] [--sizes 100,200,400]
 //              [--algos dp,greedy,graphcut] [--energy gradient|sobel] [--save-images]
+//              [--threads N] [--rolling] [--forward] [--incremental] [--maxflow ek|dinic]
+//
+// --threads N: DP worker threads (default 1). --rolling: DP keeps only 2 rows of costs.
+// --incremental: recompute energy only in a band around each removed seam.
+// --maxflow: max-flow algorithm used by graph cut (default dinic).
 //
 // Graph cut runs one max-flow per seam, so keep sizes small (100-200) for it.
 //
@@ -34,6 +39,11 @@ struct Args {
                                           seam::Algorithm::GraphCut};
     seam::EnergyType            energy     = seam::EnergyType::Gradient;
     bool                        saveImages = false;
+    bool                        incremental = false;
+    int                         threads    = 1;
+    bool                        rolling    = false;
+    bool                        forward    = false;
+    seam::MaxFlowAlgorithm      maxFlow    = seam::MaxFlowAlgorithm::Dinic;
 };
 
 std::vector<std::string> split(const std::string& s, char sep) {
@@ -65,6 +75,17 @@ Args parseArgs(int argc, char** argv) {
             }
         } else if (k == "--energy") {
             a.energy = next() == "sobel" ? seam::EnergyType::Sobel : seam::EnergyType::Gradient;
+        } else if (k == "--threads") {
+            a.threads = std::stoi(next());
+        } else if (k == "--rolling") {
+            a.rolling = true;
+        } else if (k == "--maxflow") {
+            a.maxFlow = next() == "ek" ? seam::MaxFlowAlgorithm::EdmondsKarp
+                                       : seam::MaxFlowAlgorithm::Dinic;
+        } else if (k == "--forward") {
+            a.forward = true;
+        } else if (k == "--incremental") {
+            a.incremental = true;
         } else if (k == "--save-images") {
             a.saveImages = true;
         } else {
@@ -90,7 +111,7 @@ int main(int argc, char** argv) {
         fs::create_directories(dir);
     std::ofstream csv(args.out);
     csv << "algorithm,energy,width,height,seams,ms_energy,ms_find,ms_remove,ms_total,"
-           "total_seam_cost\n";
+           "total_seam_cost,incremental,threads,rolling,maxflow,forward\n";
 
     for (const int size : args.sizes) {
         // Plain (non content-aware) scaling just to generate test inputs of each size.
@@ -100,14 +121,22 @@ int main(int argc, char** argv) {
         const int seams = std::min(args.seams, img.cols - 1);
 
         for (const auto algo : args.algos) {
-            seam::Carver carver(seam::makeSeamFinder(algo), args.energy);
+            seam::FinderOptions options;
+            options.dp.threads     = args.threads;
+            options.dp.rollingRows = args.rolling;
+            options.dp.forwardEnergy = args.forward;
+            options.graphCut.maxFlow = args.maxFlow;
+            seam::Carver carver(seam::makeSeamFinder(algo, options), args.energy);
+            carver.setIncrementalEnergy(args.incremental);
             const cv::Mat result = carver.removeSeams(img, seams, seam::Orientation::Vertical);
             const auto&   s      = carver.stats();
 
             csv << seam::toString(algo) << ',' << seam::toString(args.energy) << ','
                 << img.cols << ',' << img.rows << ',' << s.seamsRemoved << ',' << s.msEnergy
                 << ',' << s.msFind << ',' << s.msRemove << ',' << s.msTotal() << ','
-                << s.totalSeamCost << '\n';
+                << s.totalSeamCost << ',' << (args.incremental ? 1 : 0) << ',' << args.threads
+                << ',' << (args.rolling ? 1 : 0) << ','
+                << (args.maxFlow == seam::MaxFlowAlgorithm::Dinic ? "dinic" : "ek") << ',' << (args.forward ? 1 : 0) << '\n';
             std::cout << seam::toString(algo) << "  " << img.cols << 'x' << img.rows << "  "
                       << s.seamsRemoved << " seams  " << s.msTotal() << " ms\n";
 

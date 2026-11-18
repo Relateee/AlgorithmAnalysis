@@ -1,5 +1,8 @@
 #include "UI.h"
 
+#include <algorithm>
+#include <thread>
+
 #include "DemoImage.h"
 #include "FileDialog.h"
 
@@ -101,10 +104,9 @@ void SeamApp::drawControls() {
     if (algorithm_ == 0) {
         ImGui::Checkbox("Forward energy##dp", &dpForward_);
         ImGui::Checkbox("Rolling rows (5d)", &dpRolling_);
-        ImGui::BeginDisabled();
-        ImGui::SliderInt("Threads (5d)", &dpThreads_, 1, 16);
-        ImGui::EndDisabled();
-        ImGui::TextDisabled("Multi-threading: pending (Question 5d).");
+        ImGui::SliderInt("DP threads", &dpThreads_, 1,
+                         std::max(1, static_cast<int>(std::thread::hardware_concurrency())));
+        ImGui::TextDisabled("Threads split each row's columns; helps on wide images.");
     } else if (algorithm_ == 1) {
         ImGui::Checkbox("Try all start columns", &greedyAll_);
         ImGui::Checkbox("Preview: compare with DP", &compareDp_);
