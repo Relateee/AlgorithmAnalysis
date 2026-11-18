@@ -83,12 +83,17 @@ void SeamApp::drawControls() {
     ImGui::TextDisabled("Tip: drag an image file onto the window.");
 
     ImGui::SeparatorText("Algorithm");
-    if (ImGui::BeginCombo("Seam finder", "Dynamic Programming")) {
-        ImGui::Selectable("Dynamic Programming", true);
-        ImGui::BeginDisabled();
-        ImGui::Selectable("Greedy (Question 3: pending)");
-        ImGui::Selectable("Graph Cut (Question 4: pending)");
-        ImGui::EndDisabled();
+    // Indices match seam::Algorithm. Graph Cut stays disabled until Question 4 is implemented.
+    static const char* kFinders[] = {"Dynamic Programming", "Greedy",
+                                     "Graph Cut (Question 4: pending)"};
+    constexpr int kImplementedFinders = 2;
+    if (ImGui::BeginCombo("Seam finder", kFinders[algorithm_])) {
+        for (int i = 0; i < IM_ARRAYSIZE(kFinders); ++i) {
+            ImGui::BeginDisabled(i >= kImplementedFinders);
+            if (ImGui::Selectable(kFinders[i], algorithm_ == i))
+                algorithm_ = i;
+            ImGui::EndDisabled();
+        }
         ImGui::EndCombo();
     }
     if (ImGui::Combo("Energy", &energy_, "Gradient\0Sobel\0") && !original_.empty())
@@ -103,6 +108,8 @@ void SeamApp::drawControls() {
         ImGui::TextDisabled("Multi-threading: pending (Question 5d).");
     } else if (algorithm_ == 1) {
         ImGui::Checkbox("Try all start columns", &greedyAll_);
+        ImGui::Checkbox("Preview: compare with DP", &compareDp_);
+        ImGui::TextDisabled("DP seams are drawn in green underneath.");
     } else {
         ImGui::Checkbox("Forward energy##gc", &gcForward_);
         ImGui::Combo("Max-flow", &gcMaxFlow_, "Edmonds-Karp\0Dinic\0");
@@ -199,16 +206,43 @@ void SeamApp::refreshEnergy() {
 void SeamApp::previewSeams() {
     // Draws the first seam of each orientation the current algorithm would remove.
     try {
+        const auto energy = static_cast<seam::EnergyType>(energy_);
+        overlay_ = original_.clone();
+
+        // Question 3 comparison: draw DP's seams first (green) so the greedy seams sit on top.
+        const bool compare = algorithm_ == static_cast<int>(seam::Algorithm::Greedy) && compareDp_;
+        double dpVertical = 0, dpHorizontal = 0;
+        if (compare) {
+            seam::Carver dp(seam::makeSeamFinder(seam::Algorithm::DP, finderOptions()), energy);
+            const seam::Seam v = dp.findSeam(original_, seam::Orientation::Vertical);
+            dpVertical = dp.stats().totalSeamCost;
+            const seam::Seam h = dp.findSeam(original_, seam::Orientation::Horizontal);
+            dpHorizontal = dp.stats().totalSeamCost - dpVertical;
+            overlay_ = seam::Carver::drawSeam(overlay_, v, seam::Orientation::Vertical, {0, 255, 0});
+            overlay_ = seam::Carver::drawSeam(overlay_, h, seam::Orientation::Horizontal, {0, 255, 0});
+        }
+
         seam::Carver carver(seam::makeSeamFinder(static_cast<seam::Algorithm>(algorithm_),
                                                  finderOptions()),
-                            static_cast<seam::EnergyType>(energy_));
+                            energy);
         const seam::Seam v = carver.findSeam(original_, seam::Orientation::Vertical);
+        const double vertical = carver.stats().totalSeamCost;
         const seam::Seam h = carver.findSeam(original_, seam::Orientation::Horizontal);
-        overlay_ = seam::Carver::drawSeam(original_, v, seam::Orientation::Vertical, {0, 0, 255});
+        const double horizontal = carver.stats().totalSeamCost - vertical;
+        overlay_ = seam::Carver::drawSeam(overlay_, v, seam::Orientation::Vertical, {0, 0, 255});
         overlay_ = seam::Carver::drawSeam(overlay_, h, seam::Orientation::Horizontal, {255, 0, 0});
         originalTex_.upload(overlay_);
         lastStats_ = carver.stats();
-        status_    = "Red = vertical seam, blue = horizontal seam.";
+
+        status_ = "Red = vertical seam, blue = horizontal seam.";
+        if (compare) {
+            char buf[256];
+            std::snprintf(buf, sizeof(buf),
+                          "\nGreen = DP seams.\nVertical cost:   greedy %.1f vs DP %.1f\n"
+                          "Horizontal cost: greedy %.1f vs DP %.1f",
+                          vertical, dpVertical, horizontal, dpHorizontal);
+            status_ += buf;
+        }
     } catch (const std::exception& e) {
         status_ = e.what();
     }

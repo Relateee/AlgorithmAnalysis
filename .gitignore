@@ -38,6 +38,9 @@ build/
 vcpkg_installed/
 CMakeUserPresets.json
 
+# Dear ImGui writes window positions here automatically
+imgui.ini
+
 # Generated benchmark output (commit selected results for the report if needed)
 results/*
 !results/.gitkeep

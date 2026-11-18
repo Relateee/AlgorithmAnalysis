@@ -4,10 +4,10 @@ Content-aware image resizing implemented three ways: **Dynamic Programming**, **
 **Graph Cut (min-cut / max-flow)**. OpenCV is used only for image I/O and basic Mat operations;
 the seam-carving logic is implemented from scratch.
 
-**Current status:** Question 1 (DP, vertical and horizontal seams) is implemented.
-Greedy, Graph Cut and max-flow are still scaffolds for Questions 3/4. The viewer disables
-these choices until they are implemented. Forward energy and rolling cost rows work;
-multi-threaded DP remains pending. See [the architecture review](docs/architecture-review.md).
+**Current status:** Question 1 (DP, vertical and horizontal seams) and Question 3
+(Greedy, including the try-all-start-columns variant) are implemented. Graph Cut and
+max-flow are still scaffolds for Question 4, and the viewer disables that choice until it
+is implemented. Forward energy and rolling cost rows work; multi-threaded DP remains pending. See [the architecture review](docs/architecture-review.md).
 
 ## Layout
 | Folder | What |
@@ -81,6 +81,7 @@ from the viewer remain future enhancements.
 ```
 out/build/x64-release/bench/seam_bench.exe --image path/to/photo.jpg --algos dp --sizes 100,200,400 --seams 50 --save-images
 ```
-Supply an image: `assets/images/sample.jpg` is not bundled. Include only `dp` until
-the remaining algorithms are implemented; their current placeholders produce invalid
-comparison results. For the solution preset, use `build/vs2026/bench/Release/seam_bench.exe`.
+Supply an image: `assets/images/sample.jpg` is not bundled. Use `--algos dp,greedy` until
+Graph Cut is implemented; its current placeholder produces invalid comparison results.
+Run the Question 3 tests with `ctest --preset x64-release -L q3`. In the viewer, pick Greedy
+and click Preview seams to see its seams (red/blue) over the DP seams (green), with both costs. For the solution preset, use `build/vs2026/bench/Release/seam_bench.exe`.
