@@ -51,13 +51,51 @@ greedy(all starts) 15 and DP 10.
 ## 2. Questions (Item 2)
 
 ### 2a(i) The number of seams grows at least exponentially in m
-<!-- Hint: from any pixel there are at least 2 valid choices in the next row when n > 1. -->
+Choose any starting pixel in the first row. Since n > 1, every pixel has at least
+two valid successors in the next row: the pixel in the same column and at least
+one adjacent column. There are m - 1 transitions, and different sequences of
+choices produce different seams. Thus even from one fixed starting pixel there
+are at least 2^(m - 1) seams (and at least n * 2^(m - 1) over all starting
+pixels). The number therefore grows exponentially in m.
 
 ### 2a(ii) Relating the problem to its subproblems
-<!-- Recurrence M(i, j) = e(i, j) + min(...), base case, optimal substructure, answer = min of last row. -->
+Let M(i, j) be the minimum total energy of a partial vertical seam from the top
+row to pixel (i, j). The first row is the base case:
+
+    M(1, j) = e(1, j),                     1 <= j <= n.
+
+For each later row, a seam reaching (i, j) must come from column j - 1, j, or
+j + 1 in row i - 1, provided that column is within the image. Therefore:
+
+    M(i, j) = e(i, j) + min { M(i - 1, k) : k in {j - 1, j, j + 1}, 1 <= k <= n }.
+
+This has optimal substructure: if an optimal seam ending at (i, j) had a
+nonoptimal prefix ending at its predecessor, replacing that prefix with a
+cheaper one would produce a cheaper valid seam, a contradiction. Filling the
+table row by row reuses overlapping subproblems instead of enumerating seams.
+The optimal total is min_j M(m, j). To recover a seam, record a minimizing
+predecessor for each entry, start at a minimum in the last row, and backtrack.
+This takes O(mn) time and O(mn) space with the table and predecessors. For a
+horizontal seam, transpose the image and apply the same recurrence.
 
 ### 2b Can divide and conquer speed up convolution / gradient computation?
-<!-- Direct convolution, separable kernels, FFT-based convolution (a D&C algorithm), when it helps for 3x3. -->
+Direct convolution of an m by n image with a k by k kernel takes O(mnk^2)
+time. Divide and conquer can split the image into regions, process them
+independently, and combine the results, with overlapping border pixels (a halo)
+where the kernel crosses a region boundary. This can enable parallel execution,
+but it does not reduce the total asymptotic work for a fixed-size kernel; the
+overlap and task management also add overhead.
+
+The Sobel kernels are separable: each 3 by 3 kernel can be expressed as the
+product of a one-dimensional smoothing filter and a one-dimensional derivative
+filter. Applying these in two passes reduces the work for a separable k by k
+kernel from O(mnk^2) to O(mnk). For a fixed 3 by 3 Sobel filter, both approaches
+are already O(mn), so any gain is a constant-factor improvement that should be
+measured. An FFT uses a divide-and-conquer algorithm and can accelerate
+convolution with sufficiently large kernels, but padding and transform overhead
+usually make it unattractive for a small Sobel kernel. The current implementation
+computes the two 3 by 3 Sobel responses directly and combines their absolute
+values; it does not use divide and conquer or FFTs.
 
 ## 3. Time and space complexity
 | Algorithm | Time per seam | Time for k seams | Space |
