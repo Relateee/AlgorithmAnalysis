@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Seam carving quiz prep</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #1c2330;
+    --paper: #f2f4f6;
+    --sheet: #ffffff;
+    --line: #cdd3da;
+    --muted: #5b6676;
+    --seam: #d3263a;     /* the vertical seam colour in the team's viewer */
+    --keep: #17845a;     /* the DP seam colour in the viewer: used for right answers */
+    --focus: #2b57d0;    /* the horizontal seam colour: links and keyboard focus */
+    --code-bg: #e7ebef;
+    --text: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+    --code: "JetBrains Mono", ui-monospace, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font: 18px/1.55 var(--text);
+  }
+  a { color: var(--focus); }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+  .page {
+    display: grid;
+    grid-template-columns: 1fr;
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 0 20px 80px;
+  }
+  @media (min-width: 1000px) {
+    .page { grid-template-columns: 220px minmax(0, 1fr); column-gap: 48px; }
+  }
+
+  /* Hero: a live energy map with the DP seam carved through it */
+  .hero { grid-column: 1 / -1; padding-top: 28px; }
+  .hero canvas {
+    display: block;
+    width: 100%;
+    height: 190px;
+    image-rendering: pixelated;
+    border-radius: 4px;
+    background: #888;
+  }
+  .hero-caption {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 16px;
+    margin-top: 8px;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+  .hero-caption button { flex: none; }
+  h1 {
+    font-size: clamp(2.2rem, 5vw, 3.4rem);
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    margin: 28px 0 12px;
+    max-width: 18ch;
+  }
+  .intro { max-width: 68ch; margin: 0 0 8px; }
+  .intro + .intro { color: var(--muted); font-size: 0.95rem; }
+
+  /* Score bar */
+  .scorebar {
+    grid-column: 1 / -1;
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 20px;
+    margin: 20px -20px 0;
+    padding: 12px 20px;
+    background: rgba(242, 244, 246, 0.94);
+    backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--line);
+  }
+  .score { font-weight: 700; margin-right: auto; }
+  .score span { font-weight: 400; color: var(--muted); }
+  .meter { flex: 1 1 160px; max-width: 260px; height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; display: flex; }
+  .meter i { display: block; height: 100%; }
+  .meter .right { background: var(--keep); }
+  .meter .wrong { background: var(--seam); }
+  button.plain {
+    font: inherit;
+    font-size: 0.9rem;
+    color: var(--ink);
+    background: var(--sheet);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 6px 12px;
+    cursor: pointer;
+  }
+  button.plain:hover { border-color: var(--ink); }
+  button.plain[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+
+  /* Topic navigation */
+  nav.topics { display: none; }
+  @media (min-width: 1000px) {
+    nav.topics {
+      display: block;
+      position: sticky;
+      top: 76px;
+      align-self: start;
+      padding-top: 36px;
+      font-size: 0.92rem;
+    }
+    nav.topics ol { list-style: none; margin: 0; padding: 0; }
+    nav.topics li { margin: 0 0 10px; }
+    nav.topics a { color: var(--ink); text-decoration: none; display: flex; justify-content: space-between; gap: 8px; }
+    nav.topics a:hover { color: var(--focus); }
+    nav.topics .count { color: var(--muted); font-variant-numeric: tabular-nums; }
+  }
+
+  main { min-width: 0; }
+  section { padding-top: 36px; }
+  h2 { font-size: 1.6rem; line-height: 1.2; margin: 0 0 6px; }
+  .lede { color: var(--muted); max-width: 68ch; margin: 0 0 20px; }
+
+  /* Key facts */
+  .facts { background: var(--sheet); border: 1px solid var(--line); border-radius: 8px; padding: 6px 20px 14px; }
+  .facts table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+  .facts th, .facts td { text-align: left; vertical-align: top; padding: 9px 10px 9px 0; border-bottom: 1px solid var(--line); }
+  .facts tr:last-child th, .facts tr:last-child td { border-bottom: 0; }
+  .facts th { font-weight: 700; width: 34%; }
+  .formula { font-family: var(--code); font-size: 0.86rem; }
+
+  /* Questions: each one has a left rule that turns into a seam once answered */
+  .q {
+    position: relative;
+    margin: 0 0 30px;
+    padding: 2px 0 2px 22px;
+    border-left: 3px solid var(--line);
+    max-width: 72ch;
+  }
+  .q.is-right { border-left-color: var(--keep); }
+  .q.is-wrong { border-left-color: var(--seam); }
+  .q[hidden] { display: none; }
+  .q-num { font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .q-text { margin: 0 0 10px; font-weight: 700; }
+  pre {
+    margin: 0 0 12px;
+    padding: 12px 14px;
+    background: var(--code-bg);
+    border-radius: 6px;
+    overflow-x: auto;
+    font: 0.8rem/1.5 var(--code);
+    tab-size: 4;
+  }
+  pre .c { color: #5f6b7a; }
+  .opts { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+  .opt {
+    width: 100%;
+    text-align: left;
+    font: inherit;
+    font-size: 0.97rem;
+    color: var(--ink);
+    background: var(--sheet);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 9px 12px 9px 40px;
+    position: relative;
+    cursor: pointer;
+  }
+  .opt::before {
+    content: attr(data-letter);
+    position: absolute;
+    left: 12px;
+    top: 9px;
+    font-weight: 700;
+    color: var(--muted);
+  }
+  .opt:hover:not(:disabled) { border-color: var(--ink); }
+  .opt:disabled { cursor: default; }
+  .opt.correct { border-color: var(--keep); box-shadow: inset 4px 0 0 var(--keep); }
+  .opt.correct::before { color: var(--keep); }
+  .opt.chosen-wrong { border-color: var(--seam); box-shadow: inset 4px 0 0 var(--seam); }
+  .opt.chosen-wrong::before { color: var(--seam); }
+  .opt:disabled:not(.correct):not(.chosen-wrong) { opacity: 0.6; }
+  .why {
+    margin-top: 10px;
+    padding: 10px 14px;
+    background: var(--sheet);
+    border-radius: 6px;
+    font-size: 0.95rem;
+  }
+  .why strong { display: block; margin-bottom: 2px; }
+  .is-right .why strong { color: var(--keep); }
+  .is-wrong .why strong { color: var(--seam); }
+  .empty-note { color: var(--muted); font-style: italic; }
+  footer { grid-column: 1 / -1; margin-top: 40px; font-size: 0.85rem; color: var(--muted); max-width: 72ch; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="hero">
+    <canvas id="seam" aria-label="An energy map drawn as grey pixels, with a red minimum-energy seam from top to bottom found by dynamic programming" role="img"></canvas>
+    <div class="hero-caption">
+      <span>Brighter pixels have higher energy. The red seam is the cheapest connected top-to-bottom path, found with the same recurrence as <code>DPSeamFinder.cpp</code>.</span>
+      <button class="plain" id="reseed" type="button">New energy map</button>
+    </div>
+    <h1>Seam carving quiz prep</h1>
+    <p class="intro">Practice questions for the closed-book project quiz on Tue 24 Nov. The real quiz has 10–20 multiple-choice questions built from your submitted code and report, with snippets and extracts provided. The questions here are built the same way, from the code and the report.</p>
+    <p class="intro">These are predictions, not the real paper. They follow the repository as of 18 Nov, including the Question 4 graph cut. If the team changes the code or report before submitting, check the affected answers. Your answers are saved in this browser.</p>
+  </header>
+
+  <div class="scorebar" role="region" aria-label="Progress">
+    <div class="score" id="score" aria-live="polite">0 of 0 answered</div>
+    <div class="meter" aria-hidden="true"><i class="right" id="m-right"></i><i class="wrong" id="m-wrong"></i></div>
+    <button class="plain" id="only-missed" type="button" aria-pressed="false">Show only missed</button>
+    <button class="plain" id="reset" type="button">Clear answers</button>
+  </div>
+
+  <nav class="topics" aria-label="Topics"><ol id="toc"></ol></nav>
+
+  <main id="main">
+    <section id="facts">
+      <h2>Know these cold</h2>
+      <p class="lede">The facts most questions lean on. Read this first, then test yourself below.</p>
+      <div class="facts">
+        <table>
+          <tr><th>Energy (Gradient)</th><td><span class="formula">|I(r,c+1)−I(r,c−1)| + |I(r+1,c)−I(r−1,c)|</span>, on grayscale, border pixels replicated (clamped).</td></tr>
+          <tr><th>Energy (Sobel)</th><td><span class="formula">|Gx| + |Gy|</span> with handwritten 3×3 kernels <span class="formula">[−1 0 1; −2 0 2; −1 0 1]</span> and its transpose.</td></tr>
+          <tr><th>DP recurrence</th><td><span class="formula">M(1,j) = e(1,j)</span>; <span class="formula">M(i,j) = e(i,j) + min M(i−1,k), k ∈ {j−1, j, j+1}</span> in range. Answer: <span class="formula">min_j M(m,j)</span>, then backtrack through the parent table.</td></tr>
+          <tr><th>Tie-breaking</th><td>Leftmost everywhere: DP parent, DP last row, greedy start and greedy steps.</td></tr>
+          <tr><th>Number of seams</th><td>At least <span class="formula">2^(m−1)</span> from one start pixel (each pixel has ≥ 2 successors when n &gt; 1), so exponential in m.</td></tr>
+          <tr><th>DP cost</th><td>O(HW) time per seam, O(kHW) for k seams. Parent table O(HW); rolling rows cut the cost table to 2 rows (O(W)), but parents stay O(HW).</td></tr>
+          <tr><th>Greedy</th><td>Find O(H) per seam, but the whole carve is O(kHW) because energy is recomputed every time. Report: find 120–280× faster, whole carve only about 2× faster, seams cost 1.7–3.7× more.</td></tr>
+          <tr><th>Graph cut</th><td>Infinite reverse edges: one cut per row. Infinite diagonals: connected seam. Seam = rightmost pixel of the source side S in each row. The last column is joined to the sink with infinite capacity, so it can never be removed: seams use columns 0 to n−2.</td></tr>
+          <tr><th>Max-flow</th><td>Edmonds–Karp O(VE²), Dinic O(V²E). The graph is sparse (E = Θ(V), V = HW + 2), so both are O((HW)³) worst case. Measured on the tower: graph cut 868–2,019× slower than DP per seam, and its seams cost 2–3% more because it cannot use the last column.</td></tr>
+          <tr><th>Resize order</th><td>All vertical seams, then all horizontal. Horizontal seams = vertical seams of the transposed image. Shrinking only; no seam insertion.</td></tr>
+        </table>
+      </div>
+    </section>
+    <div id="sections"></div>
+  </main>
+
+  <footer>Built from the brief, the rubric, <code>docs/report.md</code> and the source in the AlgorithmAnalysis repository. Option order is shuffled per question so the answer letter is not a clue.</footer>
+</div>
+
+<script>
+const TOPICS = [
+  { id: "energy",   title: "Energy maps",               lede: "Question 1a: Energy.cpp and the grayscale conversion." },
+  { id: "dp",       title: "Dynamic programming",       lede: "Question 1b: DPSeamFinder.cpp, the parent table and its options." },
+  { id: "carver",   title: "Removing seams and resizing", lede: "Question 1c: Carver.cpp, transposes, validation and statistics." },
+  { id: "q2",       title: "Written answers",           lede: "Question 2 as answered in the report: counting seams, the recurrence, divide and conquer." },
+  { id: "greedy",   title: "Greedy",                    lede: "Question 3: GreedySeamFinder.cpp and the DP comparison in the report." },
+  { id: "graphcut", title: "Graph cut and max-flow",    lede: "Question 4: GraphCutSeamFinder.cpp, MaxFlow.cpp and section 4.2 of the report." },
+  { id: "analysis", title: "Complexity and results",    lede: "Question 5: the complexity table and what the measurements showed." },
+  { id: "testing",  title: "Design and testing",        lede: "How the code is organised and how correctness is checked." },
+];
+
+// a = index of the correct option (before shuffling)
+const QUESTIONS = [
+  // ---------------- Energy
+  { t: "energy",
+    q: "In Gradient mode, what value does intensity(r, c + 1) return when c is the last column?",
+    code: `const auto intensity = [&](int r, int c) {
+    return gray.at<float>(std::clamp(r, 0, gray.rows - 1),
+                          std::clamp(c, 0, gray.cols - 1));
+};
+gx = intensity(r, c + 1) - intensity(r, c - 1);
+gy = intensity(r + 1, c) - intensity(r - 1, c);`,
+    o: ["0, because pixels outside the image are treated as black",
+        "The intensity of the last column itself: the nearest border pixel is replicated",
+        "The intensity of column 0: indices wrap around",
+        "It throws, because the index is out of range"],
+    a: 1,
+    why: "std::clamp pulls c + 1 back to cols − 1, so the border pixel is repeated. The report says both filters \"replicate the nearest pixel at image boundaries\". This also makes one-row and one-column images work." },
+  { t: "energy",
+    q: "Which formula does the Gradient energy compute for pixel (r, c)?",
+    o: ["|I(r,c+1) − I(r,c−1)| + |I(r+1,c) − I(r−1,c)|",
+        "√((I(r,c+1) − I(r,c−1))² + (I(r+1,c) − I(r−1,c))²)",
+        "|I(r,c+1) − I(r,c)| + |I(r+1,c) − I(r,c)|",
+        "The sum of the absolute R, G and B differences to the right neighbour"],
+    a: 0,
+    why: "Central differences in x and y, combined with absolute values (an L1 sum, not a Euclidean magnitude). It works on the grayscale image from toGray, not on separate colour channels." },
+  { t: "energy",
+    q: "What do both energy filters produce for an image whose intensity is the same everywhere?",
+    o: ["An energy map that is zero everywhere", "A map that is zero inside but nonzero on the border",
+        "A map equal to the constant intensity", "An exception, because there are no edges"],
+    a: 0,
+    why: "Every difference is between equal values, and border replication means even edge pixels compare equal values. The Q1 tests check countNonZero(...) == 0 for both filters." },
+  { t: "energy",
+    q: "Why does the code compute the Sobel responses by hand instead of calling an OpenCV filter?",
+    code: `// Spec 1a: per-pixel energy map (CV_32F, same size as the image).
+// Implement the filters yourself (central differences / Sobel kernels) so the
+// "no built-in content-aware functions" rule is clearly respected.`,
+    o: ["OpenCV has no Sobel function",
+        "So that it is clear the assignment's rule against built-in content-aware functions is respected",
+        "Because handwritten kernels are asymptotically faster",
+        "Because OpenCV's Sobel cannot work on CV_32F images"],
+    a: 1,
+    why: "The comment in Energy.h gives the reason. The brief actually allows libraries for computing gradients and Sobel filters; it only bans existing content-aware resizing functions. Writing the kernels by hand removes any doubt." },
+
+  // ---------------- DP
+  { t: "dp",
+    q: "What does parents.at<int>(r, c) store?",
+    code: `current[c] = best + (opts_.forwardEnergy ? 0.f : in.energy.at<float>(r, c));
+parents.at<int>(r, c) = bestParent;`,
+    o: ["The cumulative cost of the cheapest seam ending at (r, c)",
+        "The column in row r − 1 that the cheapest seam to (r, c) came from",
+        "The column of the seam pixel in row r + 1",
+        "1 if (r, c) is on the final seam, otherwise 0"],
+    a: 1,
+    why: "bestParent is a column index in the previous row (c − 1, c or c + 1). Backtracking from the cheapest last-row pixel follows seam[r − 1] = parents(r, seam[r])." },
+  { t: "dp",
+    q: "Two predecessors of (r, c) have exactly the same cumulative cost. Which one does DP choose?",
+    code: `int bestParent = std::max(0, c - 1);
+double best = 0;
+for (int p = bestParent; p <= std::min(cols - 1, c + 1); ++p) {
+    ...
+    if (p == std::max(0, c - 1) || candidate < best) {
+        best = candidate;
+        bestParent = p;
+    }
+}`,
+    o: ["The leftmost one", "The rightmost one", "The middle one (straight up) if it is tied", "A random one"],
+    a: 0,
+    why: "The first (leftmost) candidate always initialises best, and later candidates replace it only if strictly smaller. The final row uses std::min_element, which also returns the first minimum. The report: \"Equal costs select the leftmost predecessor and final column deterministically.\"" },
+  { t: "dp",
+    q: "With rollingRows = true, what happens to memory use?",
+    code: `cv::Mat costs(opts_.rollingRows ? 2 : rows, cols, CV_64F);
+cv::Mat parents(rows, cols, CV_32S);`,
+    o: ["Both tables shrink to two rows, so total space is O(W)",
+        "The cost table shrinks to two rows (O(W)), but the parent table is still O(HW) for backtracking",
+        "Nothing changes; rolling rows only makes it faster",
+        "The parent table shrinks to two rows, but the cost table stays O(HW)"],
+    a: 1,
+    why: "Row r only needs costs from row r − 1, so two rows suffice. Recovering the seam needs every row's parent, so parents stay H × W. The Q1 tests check that the rolling and full versions return the identical seam." },
+  { t: "dp",
+    q: "Why are cumulative costs stored as double when the energy map is float?",
+    o: ["OpenCV cannot store float matrices with more than one row",
+        "To avoid accumulating rounding error when many energies are summed along a long seam",
+        "Because negative energies need a double",
+        "Doubles are faster than floats on x64"],
+    a: 1,
+    why: "The code comment says: \"Double precision avoids accumulating rounding error over long seams.\" A seam sums one value per row, so error can build up in tall images." },
+  { t: "dp",
+    q: "In forward-energy mode, what does a seam pay for rows after the first?",
+    o: ["The pixel energy plus the transition cost",
+        "Only the transition cost CL, CU or CR, depending on whether it arrived from up-left, up or up-right",
+        "Only the pixel energy, as in backward mode",
+        "The maximum of the pixel energy and the transition cost"],
+    a: 1,
+    why: "current[c] = best + 0 in forward mode, and best already includes the transition (forward.left / up / right). Only the first row uses pixel energy. Forward energy measures the new edges created by joining the pixels on either side of the seam." },
+  { t: "dp",
+    q: "What happens if DPOptions.threads is set to 4?",
+    o: ["The DP rows are computed by four threads",
+        "The value is ignored and one thread is used",
+        "findVerticalSeam throws std::invalid_argument, because multi-threaded DP is not implemented",
+        "The image is split into four vertical strips"],
+    a: 2,
+    why: "The code throws \"Multi-threaded DP is not implemented yet; use one thread.\" The viewer greys out the Threads slider. Multi-threading is still listed as pending for section 5." },
+
+  // ---------------- Carver
+  { t: "carver",
+    q: "How does the Carver find and remove a horizontal seam?",
+    o: ["It runs a separate horizontal version of each finder",
+        "It transposes the image, finds and removes a vertical seam, then transposes back",
+        "It rotates the image 90° with cv::rotate and rotates it back",
+        "It removes a vertical seam and then rescales the height"],
+    a: 1,
+    why: "Finders only ever find vertical seams (SeamFinder.h). Horizontal seams are vertical seams of the transposed image, which avoids writing every algorithm twice." },
+  { t: "carver",
+    q: "In resize(), in what order are seams removed?",
+    code: `// Simple order: all vertical seams, then all horizontal ones.
+cv::Mat out = removeSeams(bgr, bgr.cols - targetWidth, Orientation::Vertical);
+return removeSeams(out, out.rows - targetHeight, Orientation::Horizontal);`,
+    o: ["Alternating vertical and horizontal, whichever seam is cheaper",
+        "All vertical seams first, then all horizontal seams",
+        "All horizontal seams first, then all vertical seams",
+        "The optimal order, chosen by a second DP"],
+    a: 1,
+    why: "The report states the vertical-then-horizontal order is not claimed to be globally optimal. The original paper chooses the order with a second DP; that is mentioned as an optional extra in the code comment." },
+  { t: "carver",
+    q: "After a seam is removed, what does the Carver do before finding the next seam?",
+    o: ["Removes the seam's pixels from the old energy map and reuses it",
+        "Recomputes the grayscale image and the whole energy map for the smaller image",
+        "Updates only the energy of pixels next to the removed seam",
+        "Nothing: all seams are found from the original energy map"],
+    a: 1,
+    why: "findSeam calls toGray and computeEnergy on the current image every time. That is spec 1c, and a dedicated Q1 test checks energy is recalculated after each removal. Updating only the pixels next to the seam is a possible improvement, not what the code does." },
+  { t: "carver",
+    q: "Which request makes Carver::resize throw?",
+    o: ["Target width equal to the current width", "Target 1 × 1", "Target larger than the original image", "Any target on a square image"],
+    a: 2,
+    why: "Targets must be positive and no larger than the original: the code shrinks images only; seam insertion is not implemented. Equal size removes zero seams, and 1 × 1 is tested and allowed." },
+  { t: "carver",
+    q: "What does CarveStats.totalSeamCost add up when forward energy is on?",
+    o: ["The forward-energy objective that the finder minimised",
+        "The sum of backward pixel energies along each removed seam",
+        "The number of pixels removed",
+        "The max-flow value"],
+    a: 1,
+    why: "findSeam always adds seamCost(energy, seam), the pixel-energy sum. The report notes it does this \"including when forward mode is enabled\", so forward mode can show a higher total even though it optimises something else." },
+  { t: "carver",
+    q: "Why does removeVerticalSeam copy each row separately with memcpy, instead of one copy for the whole image?",
+    code: `// Access each row separately: an input ROI need not be contiguous.
+if (leftBytes > 0)
+    std::memcpy(out.ptr(r), img.ptr(r), leftBytes);
+if (rightBytes > 0)
+    std::memcpy(out.ptr(r) + leftBytes, img.ptr(r) + leftBytes + pixelBytes, rightBytes);`,
+    o: ["Because the input may be a region of a larger matrix, whose rows are not stored back to back",
+        "Because memcpy cannot copy more than one row at a time",
+        "Because each row removes a different number of pixels",
+        "To run the rows in parallel"],
+    a: 0,
+    why: "A cv::Mat ROI shares memory with its parent, so row r + 1 does not start right after row r. Copying the part left of the seam pixel, then the part right of it, works for any input. The tests include non-contiguous inputs." },
+
+  // ---------------- Q2
+  { t: "q2",
+    q: "The report proves the number of seams grows at least exponentially in m. What is the bound from one fixed starting pixel?",
+    o: ["At least m · n", "At least 2^(m−1)", "At least 3^m", "Exactly n · 3^(m−1)"],
+    a: 1,
+    why: "Since n > 1, every pixel has at least two valid successors in the next row (straight down and at least one diagonal). There are m − 1 transitions, so at least 2^(m−1) different seams, and at least n · 2^(m−1) over all start pixels." },
+  { t: "q2",
+    q: "Why does that argument need n > 1?",
+    o: ["With one column every row has exactly one choice, so there is only one seam",
+        "With one column the energy is undefined",
+        "Because the DP table needs at least two columns",
+        "It does not: the bound holds for n = 1 too"],
+    a: 0,
+    why: "With n = 1 the only successor is straight down, so the count stays at 1. With n ≥ 2 even an edge pixel has two successors, which gives the factor of 2 per row." },
+  { t: "q2",
+    q: "Which is the recurrence in the report's answer to 2a(ii)?",
+    o: ["M(i, j) = e(i, j) + min{ M(i−1, k) : k ∈ {j−1, j, j+1}, 1 ≤ k ≤ n }",
+        "M(i, j) = min{ e(i, k) : k ∈ {j−1, j, j+1} } + M(i−1, j)",
+        "M(i, j) = e(i, j) + M(i−1, j) + M(i, j−1)",
+        "M(i, j) = max{ M(i−1, k) } − e(i, j)"],
+    a: 0,
+    why: "Base case M(1, j) = e(1, j). Each later entry adds its own energy to the cheapest of its up to three predecessors. The optimum is min over j of M(m, j). The report justifies it with optimal substructure (a cut-and-paste argument) and overlapping subproblems." },
+  { t: "q2",
+    q: "According to the report, does divide and conquer reduce the work of a 3 × 3 Sobel convolution?",
+    o: ["Yes, from O(mn) to O(mn / log mn)",
+        "No: splitting the image (with overlapping halos) can run parts in parallel, but the total work stays O(mn) for a fixed kernel",
+        "Yes, because FFT convolution is always faster",
+        "No, because convolution cannot be split into regions at all"],
+    a: 1,
+    why: "Regions need a halo of border pixels where the kernel crosses a boundary, which adds overhead. The real savings the report names are separability (O(mnk²) to O(mnk)) and FFT for large kernels, neither of which helps much for a fixed 3 × 3 kernel." },
+  { t: "q2",
+    q: "What does separability of the Sobel kernel change, according to the report?",
+    o: ["Direct k × k convolution falls from O(mnk²) to O(mnk), by doing two 1-D passes",
+        "It removes the need for a grayscale image",
+        "It makes the energy map exact at the borders",
+        "It lets the DP skip rows"],
+    a: 0,
+    why: "Each Sobel kernel is the product of a 1-D smoothing filter and a 1-D derivative filter. For k = 3 both versions are still O(mn), so the gain is only a constant factor." },
+
+  // ---------------- Greedy
+  { t: "greedy",
+    q: "How does the plain greedy finder build its seam?",
+    o: ["It starts at the leftmost minimum of the top row, then in each row moves to the cheapest of the up to three pixels below",
+        "It picks the minimum-energy pixel of every row independently",
+        "It runs DP on the top half and greedy on the bottom half",
+        "It starts at the cheapest bottom-row pixel and walks upwards"],
+    a: 0,
+    why: "No table and no lookahead: O(H) per seam. Ties pick the leftmost candidate, matching DP. Picking each row's minimum independently would not give a connected seam." },
+  { t: "greedy",
+    q: "On this 3 × 3 energy map from tests/src/q3.cpp, what does plain greedy pay, and what does DP pay?",
+    code: `//   0   5   5
+//   0   5   5
+// 100 100   5`,
+    o: ["Greedy 100, DP 10", "Greedy 15, DP 10", "Greedy 10, DP 10", "Greedy 100, DP 15"],
+    a: 0,
+    why: "Greedy starts at the cheap 0 in column 0, follows the 0 below, then is trapped: only 100s are reachable. DP finds 0 → 5 → 5 = 10 by stepping right early. Greedy with all start columns pays 15, starting from column 2 (5 → 5 → 5)." },
+  { t: "greedy",
+    q: "In the report, greedy finds a seam 120–280× faster than DP, but the whole carve is only about 2× faster. Why?",
+    o: ["Greedy removes seams more slowly",
+        "Recomputing the O(HW) energy map after every removal dominates both, so finding the seam is a small part of the total",
+        "The timer includes loading the image",
+        "Greedy has to try every start column"],
+    a: 1,
+    why: "Finding is O(H) for greedy versus O(HW) for DP, but both pay O(HW) per seam for the energy map, so the totals are much closer. That is why the complexity table says O(kH) to find, but O(kHW) overall." },
+  { t: "greedy",
+    q: "tryAllStarts runs greedy from every top-row column and keeps the cheapest seam. Which statement is true?",
+    o: ["It is O(HW) and always optimal",
+        "It is O(HW) like DP, but still not guaranteed optimal, because every run is still a local rule without lookahead",
+        "It is O(H) and optimal",
+        "It is O(HW²) and optimal"],
+    a: 1,
+    why: "W greedy runs of O(H) each is O(HW). It only compares W particular paths, not all of them. The tests check DP ≤ greedy(all starts) ≤ greedy on 200 random maps, and the 3 × 3 trap shows 10 < 15." },
+  { t: "greedy",
+    q: "What did the report find about greedy's seam cost compared with DP?",
+    o: ["Greedy seams cost 1.7–3.7× more energy, and the gap grows with image size",
+        "Greedy seams cost the same as DP",
+        "Greedy seams cost less on larger images",
+        "Greedy seams cost exactly twice as much"],
+    a: 0,
+    why: "More rows give greedy more chances to be led into an expensive region. Visually, on img102 DP keeps the mountain and sun intact while greedy squashes the mountain." },
+  { t: "greedy",
+    q: "On img100, the report says greedy happened to look smoother than DP. What explanation does it give?",
+    o: ["Greedy uses forward energy",
+        "Backward energy ignores the new edges a removal creates, so DP concentrated seams along curved edges and left staircase artifacts; forward energy is designed to fix that",
+        "The DP implementation had a bug on that image",
+        "Greedy removed fewer seams"],
+    a: 1,
+    why: "Lower total energy is not always better-looking. Backward energy only counts what is removed, not the discontinuity that removal creates. Forward energy (Rubinstein et al. 2008) charges for the new neighbours." },
+
+  // ---------------- Graph cut
+  { t: "graphcut",
+    q: "Why are the reverse edges (r, c+1) → (r, c) given infinite capacity?",
+    o: ["To let flow return to the source",
+        "So that if (r, c+1) is on the source side, (r, c) must be too: each row's source side is a prefix, and a finite cut crosses exactly one horizontal edge per row",
+        "To make Dinic faster",
+        "So the seam can move two columns between rows"],
+    a: 1,
+    why: "If (r, c+1) were in S and (r, c) in T, the infinite edge would cross the cut and its capacity would be infinite. So S is columns 0..k in every row, and exactly one horizontal edge per row is cut: the removed pixel." },
+  { t: "graphcut",
+    q: "What do the infinite diagonal edges (r, c) → (r−1, c−1) and (r, c) → (r+1, c−1) guarantee?",
+    o: ["The seam is connected: the removed columns in adjacent rows differ by at most 1",
+        "The seam always moves diagonally",
+        "The first and last rows are never cut",
+        "The flow is integral"],
+    a: 0,
+    why: "If (r, c) is in S, so are (r−1, c−1) and (r+1, c−1). That stops the boundary from jumping more than one column between rows. The test \"ignores a cheap but disconnected path\" checks this." },
+  { t: "graphcut",
+    q: "After max-flow, how is the seam read off?",
+    code: `const std::vector<bool> side = g.minCutSourceSide(source);
+for (int r = 0; r < rows; ++r) {
+    int c = cols - 1;
+    while (c > 0 && !side[node(r, c)])
+        --c;
+    seam[r] = c;
+}`,
+    o: ["The leftmost pixel in each row that is not reachable from the source",
+        "The rightmost pixel in each row that is still reachable from the source in the residual graph",
+        "The pixel in each row with the most flow through it",
+        "The pixel with the lowest energy in each row"],
+    a: 1,
+    why: "minCutSourceSide is a BFS from the source over edges with residual capacity > 1e-9. Those nodes form S. The edge leaving the rightmost S pixel in each row is the saturated one, so that pixel is removed." },
+  { t: "graphcut",
+    q: "As in the brief, every last-column pixel is joined to the sink with infinite capacity. What does that mean for the seams graph cut can find?",
+    code: `g.addEdge(source, node(r, 0), inf);
+g.addEdge(node(r, cols - 1), sink, inf);`,
+    o: ["The last column can never be removed, so graph cut finds the best seam of the image without its last column",
+        "The seam always ends in the last column",
+        "It is what keeps the seam connected",
+        "Nothing: edges into the sink are never part of the cut"],
+    a: 0,
+    why: "A last-column pixel on the source side would put an infinite edge in the cut, so last-column pixels are always on the sink side and the rightmost source-side pixel is at most column n − 2. When DP's best seam uses the last column, graph cut has to take a slightly more expensive one: 2–3% more on the tower image." },
+  { t: "graphcut",
+    q: "Why is graph cut's seam the cheapest one among the seams its graph can represent?",
+    o: ["Because Dinic always picks the cheapest path first",
+        "By the max-flow min-cut theorem, the max-flow value equals the minimum cut capacity, and every finite cut is exactly one connected seam's cost",
+        "Because it is checked against DP at run time",
+        "Because energies are integers"],
+    a: 1,
+    why: "The graph is built so finite cuts correspond one-to-one with connected seams in columns 0 to n − 2, with cut capacity = seam cost. The cut found from the residual graph after max-flow has minimum capacity, so it is the cheapest of those seams." },
+  { t: "graphcut",
+    q: "With the forward option on, what capacity does the edge (r, c) → (r, c+1) get?",
+    code: `const auto removalCost = [&](int r, int c) -> double {
+    return opts_.forwardEnergy ? forwardCosts(in.gray, r, c).up : in.energy.at<float>(r, c);
+};`,
+    o: ["|I(r, c+1) − I(r, c−1)|, the brief's suggested forward energy",
+        "e(r, c) + |I(r, c+1) − I(r, c−1)|",
+        "CL, CU or CR, depending on which way the seam moves",
+        "|I(r, c) − I(r−1, c)|"],
+    a: 0,
+    why: "forwardCosts(...).up is the CU term: the difference between the two pixels that become neighbours. DP's forward mode also adds CL or CR when the seam steps diagonally, so the two forward modes optimise different things. That is why the comparisons use backward energy, the default for both." },
+  { t: "graphcut",
+    q: "How does FlowGraph find the reverse (residual) edge of edge e?",
+    code: `void FlowGraph::addEdge(int u, int v, Cap cap, Cap revCap) {
+    adj_[u].push_back(static_cast<int>(edges_.size()));
+    edges_.push_back({v, cap});
+    adj_[v].push_back(static_cast<int>(edges_.size()));
+    edges_.push_back({u, revCap});
+}`,
+    o: ["e + edges_.size() / 2", "e ^ 1: each edge and its reverse are stored as an even–odd pair", "By searching adj_[v] for an edge back to u", "e − 1"],
+    a: 1,
+    why: "Edges are always added in pairs, so the forward edge has an even index and its reverse the next odd index. XOR with 1 flips between them. Pushing flow subtracts from edges_[e] and adds to edges_[e ^ 1]." },
+  { t: "graphcut",
+    q: "Why is Dinic's depth-first search written iteratively instead of recursively?",
+    o: ["Iteration is asymptotically faster",
+        "Augmenting paths in a seam graph can contain thousands of nodes, enough to overflow the call stack with recursion",
+        "C++ does not allow recursive lambdas",
+        "To use multiple threads"],
+    a: 1,
+    why: "A path runs across the image and can wind through many rows. Windows' default stack is about 1 MB, so deep recursion is risky on large images." },
+  { t: "graphcut",
+    q: "Why does the max-flow code treat residual capacities ≤ 1e-9 as zero?",
+    o: ["To absorb floating-point rounding left after subtracting a bottleneck along a path",
+        "Because energies are always at least 1e-9",
+        "To make the flow integral",
+        "To speed up BFS"],
+    a: 0,
+    why: "Capacities are doubles. Subtracting the same bottleneck along a path can leave tiny positive residues that would otherwise count as usable capacity." },
+
+  // ---------------- Analysis
+  { t: "analysis",
+    q: "What are the DP time and space costs in the report's complexity table?",
+    o: ["O(HW) time per seam, O(kHW) for k seams; O(HW) space for parents (+ O(W) costs with rolling rows)",
+        "O(H) time per seam; O(H) space",
+        "O(HW log HW) time per seam; O(HW) space",
+        "O((HW)²) time per seam; O(HW) space"],
+    a: 0,
+    why: "Each pixel looks at three predecessors once. The energy map and removal are also O(HW) per seam, so the whole carve of k seams is O(kHW), with images getting smaller each iteration." },
+  { t: "analysis",
+    q: "The seam graph has V = HW + 2 nodes and E = Θ(HW) edges. What do the worst-case bounds of Edmonds–Karp (O(VE²)) and Dinic (O(V²E)) become?",
+    o: ["Edmonds–Karp O((HW)²), Dinic O(HW)", "Both O((HW)³)", "Both O(HW log HW)", "Edmonds–Karp O((HW)³), Dinic O((HW)²)"],
+    a: 1,
+    why: "Because the graph is sparse (E = Θ(V)), VE² and V²E are both V³. Dinic is usually faster in practice, because each BFS builds a level graph that serves many augmenting paths." },
+  { t: "analysis",
+    q: "Which result matches the DP vs graph-cut measurements in section 4.2?",
+    o: ["Graph cut found cheaper seams than DP",
+        "Graph cut's seams cost 2–3% more than DP's, because it cannot use the last column, and it was 868–2,019× slower per seam",
+        "Graph cut was faster than DP on small images",
+        "Graph cut and DP removed completely different pixels"],
+    a: 1,
+    why: "Removing 70 seams from the tower, only 262 of the 13,020 removed pixels differ, and the results look the same. The slowdown grows with size because DP is linear in pixels while max-flow grew like about (HW)^1.6." },
+  { t: "analysis",
+    q: "The measured growth rate of greedy's find time was about (HW)^0.6. Why less than 1?",
+    o: ["Greedy touches one pixel per row, so its time grows with H, and at a fixed aspect ratio H grows like (HW)^0.5",
+        "Greedy skips half the rows",
+        "Because of caching in the energy map",
+        "It is measurement noise; the true exponent is 1"],
+    a: 0,
+    why: "Finding a greedy seam is O(H). Scaling an image keeps its aspect ratio, so H ∝ √(HW). DP's exponent was 1.03 (linear in pixels) and graph cut's 1.63." },
+  { t: "analysis",
+    q: "Which statement about optimality matches the report?",
+    o: ["Removing k seams one at a time gives the globally optimal k-seam removal",
+        "Each backward-energy seam is optimal for the current image, but the whole sequence of removals and the vertical-then-horizontal order are not claimed globally optimal",
+        "Greedy is optimal when tryAllStarts is on",
+        "Forward energy and backward energy always choose the same seam"],
+    a: 1,
+    why: "Each step is optimal, but optimal steps do not add up to an optimal sequence, and the order of vertical and horizontal removals also matters." },
+  { t: "analysis",
+    q: "When is graph cut worth its cost, according to the report's discussion?",
+    o: ["Never; it is strictly worse",
+        "For single images, because it looks better",
+        "For generalisations such as video, where a seam becomes a connected surface through all frames and the row-by-row DP no longer applies",
+        "When the image is larger than 4K"],
+    a: 2,
+    why: "For one image it gives almost the same result as DP at a much higher cost. Rubinstein et al. (2008) use a min-cut construction for video retargeting." },
+
+  // ---------------- Testing and design
+  { t: "testing",
+    q: "What independent reference does the Q1 suite compare DP against?",
+    o: ["OpenCV's built-in seam carving",
+        "Exhaustive enumeration of every connected seam, over 960 combinations of size, seed, forward energy and rolling rows",
+        "The greedy finder",
+        "Hand-computed answers for three images"],
+    a: 1,
+    why: "6 heights × 5 widths × 8 seeds × forward on/off × rolling on/off = 960 cases. Enumeration does not use the recurrence at all, so it checks the DP independently." },
+  { t: "testing",
+    q: "Why do all finders implement the same SeamFinder interface and only find vertical seams?",
+    o: ["So the Carver handles energy, orientation and removal once, and every algorithm is compared on identical energy and removal code",
+        "Because C++ requires it for templates",
+        "To make the finders run in parallel",
+        "Because horizontal seams are not part of the assignment"],
+    a: 0,
+    why: "makeSeamFinder(algo, options) returns a DP, Greedy or GraphCut finder behind one interface. Only the seam-finding step differs, so timing and cost comparisons are fair." },
+  { t: "testing",
+    q: "How does the Q4 suite check the max-flow code beyond the textbook example?",
+    o: ["It compares the flow with a brute-force minimum over every possible s–t cut on 300 random small networks",
+        "It compares Edmonds–Karp with OpenCV's max-flow",
+        "It only checks that the flow is positive",
+        "It runs the CLRS example 300 times"],
+    a: 0,
+    why: "Checking every cut directly tests the max-flow min-cut theorem. It also checks that the cut found by the residual BFS has exactly the flow's capacity, for both algorithms." },
+];
+
+// ---------- rendering ----------
+const STORE = "seam-quiz-answers-v2";
+let answers = {};
+try { answers = JSON.parse(localStorage.getItem(STORE) || "{}") || {}; } catch (e) { answers = {}; }
+const save = () => { try { localStorage.setItem(STORE, JSON.stringify(answers)); } catch (e) {} };
+
+function escapeHtml(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function highlight(code) {
+  return escapeHtml(code).split("\n").map(line => {
+    const i = line.indexOf("//");
+    return i < 0 ? line : line.slice(0, i) + '<span class="c">' + line.slice(i) + "</span>";
+  }).join("\n");
+}
+// Deterministic shuffle per question (mulberry32), so the right answer is not always in the same slot.
+function order(n, seed) {
+  let a = seed >>> 0;
+  const r = () => {
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const idx = [...Array(n).keys()];
+  for (let i = n - 1; i > 0; i--) {
+    const j = Math.floor(r() * (i + 1));
+    [idx[i], idx[j]] = [idx[j], idx[i]];
+  }
+  return idx;
+}
+
+const sectionsEl = document.getElementById("sections");
+const tocEl = document.getElementById("toc");
+let n = 0;
+for (const topic of TOPICS) {
+  const qs = QUESTIONS.map((q, i) => ({ ...q, id: i })).filter(q => q.t === topic.id);
+  const sec = document.createElement("section");
+  sec.id = topic.id;
+  sec.innerHTML = `<h2>${topic.title}</h2><p class="lede">${topic.lede}</p>`;
+  for (const q of qs) {
+    n++;
+    const el = document.createElement("article");
+    el.className = "q";
+    el.dataset.id = q.id;
+    const perm = order(q.o.length, q.id * 31 + 122);
+    const letters = "ABCD";
+    el.innerHTML =
+      `<p class="q-text"><span class="q-num">${n}.</span> ${escapeHtml(q.q)}</p>` +
+      (q.code ? `<pre><code>${highlight(q.code)}</code></pre>` : "") +
+      `<ul class="opts">` +
+      perm.map((orig, k) => `<li><button type="button" class="opt" data-orig="${orig}" data-letter="${letters[k]}">${escapeHtml(q.o[orig])}</button></li>`).join("") +
+      `</ul><div class="why" hidden></div>`;
+    sec.appendChild(el);
+  }
+  sectionsEl.appendChild(sec);
+  const li = document.createElement("li");
+  li.innerHTML = `<a href="#${topic.id}"><span>${topic.title}</span><span class="count" data-topic="${topic.id}"></span></a>`;
+  tocEl.appendChild(li);
+}
+const factsLi = document.createElement("li");
+factsLi.innerHTML = `<a href="#facts"><span>Know these cold</span></a>`;
+tocEl.prepend(factsLi);
+
+function reveal(el, chosen, focusWhy) {
+  const q = QUESTIONS[el.dataset.id];
+  const right = chosen === q.a;
+  el.classList.remove("is-right", "is-wrong");
+  el.classList.add(right ? "is-right" : "is-wrong");
+  el.querySelectorAll(".opt").forEach(b => {
+    const orig = Number(b.dataset.orig);
+    b.disabled = true;
+    b.classList.toggle("correct", orig === q.a);
+    b.classList.toggle("chosen-wrong", orig === chosen && !right);
+  });
+  const why = el.querySelector(".why");
+  const letter = el.querySelector(`.opt[data-orig="${q.a}"]`).dataset.letter;
+  why.innerHTML = `<strong>${right ? "Right." : "Not quite: the answer is " + letter + "."}</strong>${escapeHtml(q.why)}`;
+  why.hidden = false;
+  if (focusWhy) why.setAttribute("tabindex", "-1");
+}
+function unreveal(el) {
+  el.classList.remove("is-right", "is-wrong");
+  el.querySelectorAll(".opt").forEach(b => { b.disabled = false; b.classList.remove("correct", "chosen-wrong"); });
+  const why = el.querySelector(".why");
+  why.hidden = true;
+  why.innerHTML = "";
+}
+
+let onlyMissed = false;
+function update() {
+  const total = QUESTIONS.length;
+  const done = Object.keys(answers).length;
+  const right = Object.entries(answers).filter(([id, c]) => QUESTIONS[id].a === c).length;
+  document.getElementById("score").innerHTML =
+    `${done} of ${total} answered <span>${done ? `(${right} right, ${done - right} missed)` : ""}</span>`;
+  document.getElementById("m-right").style.width = (100 * right / total) + "%";
+  document.getElementById("m-wrong").style.width = (100 * (done - right) / total) + "%";
+  for (const topic of TOPICS) {
+    const ids = QUESTIONS.map((q, i) => i).filter(i => QUESTIONS[i].t === topic.id);
+    const d = ids.filter(i => i in answers).length;
+    document.querySelector(`.count[data-topic="${topic.id}"]`).textContent = `${d}/${ids.length}`;
+  }
+  document.querySelectorAll(".q").forEach(el => {
+    const id = el.dataset.id;
+    el.hidden = onlyMissed && !(id in answers && answers[id] !== QUESTIONS[id].a);
+  });
+  document.querySelectorAll("#sections section").forEach(sec => {
+    const visible = [...sec.querySelectorAll(".q")].some(q => !q.hidden);
+    let note = sec.querySelector(".empty-note");
+    if (!visible && onlyMissed) {
+      if (!note) { note = document.createElement("p"); note.className = "empty-note"; sec.appendChild(note); }
+      note.textContent = "Nothing missed here yet.";
+    } else if (note) note.remove();
+  });
+}
+
+document.querySelectorAll(".q").forEach(el => {
+  const id = el.dataset.id;
+  if (id in answers) reveal(el, answers[id], false);
+  el.addEventListener("click", e => {
+    const b = e.target.closest(".opt");
+    if (!b || b.disabled) return;
+    answers[id] = Number(b.dataset.orig);
+    save();
+    reveal(el, answers[id], true);
+    update();
+  });
+});
+document.getElementById("only-missed").addEventListener("click", e => {
+  onlyMissed = !onlyMissed;
+  e.currentTarget.setAttribute("aria-pressed", String(onlyMissed));
+  e.currentTarget.textContent = onlyMissed ? "Show all questions" : "Show only missed";
+  update();
+});
+document.getElementById("reset").addEventListener("click", () => {
+  answers = {};
+  save();
+  document.querySelectorAll(".q").forEach(unreveal);
+  update();
+});
+update();
+
+// ---------- hero: energy map + DP seam (same recurrence and tie-breaking as DPSeamFinder) ----------
+const canvas = document.getElementById("seam");
+const ctx = canvas.getContext("2d");
+const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+let seed = 3;
+let anim = 0;
+
+function rand() { seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
+
+function makeEnergy(cols, rows) {
+  // A smooth "scene" (sky, horizon, a few towers), then central-difference energy like Gradient mode.
+  const img = [];
+  const towers = Array.from({ length: 3 }, () => ({ x: Math.floor(rand() * cols), w: 2 + Math.floor(rand() * 4), h: Math.floor(rows * (0.3 + rand() * 0.5)) }));
+  const ph1 = rand() * 6, ph2 = rand() * 6;
+  for (let r = 0; r < rows; r++) {
+    img.push([]);
+    for (let c = 0; c < cols; c++) {
+      let v = 120 + 40 * Math.sin(c / 7 + ph1) * Math.sin(r / 5 + ph2);
+      if (r > rows * 0.78) v = 70 + 10 * Math.sin(c / 3);
+      for (const t of towers) if (c >= t.x && c < t.x + t.w && r >= rows - t.h) v = 200 + 25 * ((r + c) % 3);
+      v += (rand() - 0.5) * 7;
+      img[r].push(v);
+    }
+  }
+  const I = (r, c) => img[Math.min(rows - 1, Math.max(0, r))][Math.min(cols - 1, Math.max(0, c))];
+  return img.map((row, r) => row.map((_, c) => Math.abs(I(r, c + 1) - I(r, c - 1)) + Math.abs(I(r + 1, c) - I(r - 1, c))));
+}
+
+function dpSeam(e) {
+  const rows = e.length, cols = e[0].length;
+  const cost = [e[0].slice()], parent = [Array(cols).fill(0)];
+  for (let r = 1; r < rows; r++) {
+    cost.push([]); parent.push([]);
+    for (let c = 0; c < cols; c++) {
+      let bp = Math.max(0, c - 1), best = cost[r - 1][bp];
+      for (let p = bp + 1; p <= Math.min(cols - 1, c + 1); p++) if (cost[r - 1][p] < best) { best = cost[r - 1][p]; bp = p; }
+      cost[r].push(best + e[r][c]); parent[r].push(bp);
+    }
+  }
+  const last = cost[rows - 1];
+  const seam = Array(rows);
+  seam[rows - 1] = last.indexOf(Math.min(...last));
+  for (let r = rows - 1; r > 0; r--) seam[r - 1] = parent[r][seam[r]];
+  return seam;
+}
+
+function drawHero() {
+  cancelAnimationFrame(anim);
+  const cssW = canvas.clientWidth;
+  const cell = cssW < 600 ? 7 : 10;
+  const cols = Math.max(20, Math.floor(cssW / cell));
+  const rows = Math.max(10, Math.floor(canvas.clientHeight / cell));
+  canvas.width = cols; canvas.height = rows;
+  const e = makeEnergy(cols, rows);
+  let max = 0; for (const row of e) for (const v of row) max = Math.max(max, v);
+  const imgData = ctx.createImageData(cols, rows);
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    const g = Math.round(40 + 200 * Math.sqrt(e[r][c] / (max || 1)));
+    const k = 4 * (r * cols + c);
+    imgData.data[k] = g; imgData.data[k + 1] = g; imgData.data[k + 2] = Math.min(255, g + 8); imgData.data[k + 3] = 255;
+  }
+  ctx.putImageData(imgData, 0, 0);
+  const seam = dpSeam(e);
+  ctx.fillStyle = "#d3263a";
+  if (reduceMotion) { seam.forEach((c, r) => ctx.fillRect(c, r, 1, 1)); return; }
+  let r = 0;
+  const start = performance.now();
+  const step = now => {
+    const target = Math.min(rows, Math.floor((now - start) / (1100 / rows)) + 1);
+    for (; r < target; r++) ctx.fillRect(seam[r], r, 1, 1);
+    if (r < rows) anim = requestAnimationFrame(step);
+  };
+  anim = requestAnimationFrame(step);
+}
+document.getElementById("reseed").addEventListener("click", () => { seed = Math.floor(Math.random() * 1e6) + 1; drawHero(); });
+let resizeTimer;
+window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(drawHero, 150); });
+drawHero();
+</script>
+</body>
+</html>

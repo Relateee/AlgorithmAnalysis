@@ -8,7 +8,7 @@ namespace seam {
 //   source -> every pixel in column 0          (infinite capacity)
 //   every pixel in last column -> sink         (infinite capacity)
 //   (i, j) -> (i, j+1)  capacity = cost of removing (i, j)  (energy or forward energy)
-//   (i, j+1) -> (i, j)                          (infinite)
+//   (i, j+1) -> (i, j)                          (infinite)  - one cut per row
 //   (i, j) -> (i-1, j-1) and (i, j) -> (i+1, j-1)  (infinite)  - forces one connected seam
 // Run max-flow, BFS from the source in the residual graph to get side S; in each row the
 // rightmost pixel in S is the seam pixel.

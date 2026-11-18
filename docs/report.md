@@ -34,7 +34,7 @@ the sum of backward pixel energies, including when forward mode is enabled.
 Validation includes exhaustive enumeration on small maps, both energy filters,
 horizontal and vertical seams, exact retained pixels, boundary cases and a controlled
 test that verifies energy is recalculated after each removal. See `tests/src/q1.cpp`.
-Graph Cut, multi-threading and the remaining analysis below still require work.
+Multi-threading and the improvements discussion (section 5) still require work.
 
 ### Greedy (Question 3)
 `GreedySeamFinder.cpp` starts at the lowest-energy pixel of the top row and, in every
@@ -47,6 +47,43 @@ That costs O(HW) like DP but is still not optimal.
 `tests/src/q3.cpp` checks the rule step by step, checks DP <= greedy(all starts) <= greedy
 on 200 random energy maps, and includes a 3x3 counterexample where greedy pays 100,
 greedy(all starts) 15 and DP 10.
+
+### Graph cut (Question 4)
+`GraphCutSeamFinder.cpp` builds the network described in the brief: one node per pixel plus a
+source and a sink. The source connects to every first-column pixel and every last-column pixel
+connects to the sink, both with infinite capacity. The edge from (i, j) to (i, j+1) has
+capacity equal to the cost of removing (i, j): its energy e(i, j), or with the forward option
+|I(i, j+1) - I(i, j-1)|. Its reverse edge is infinite, and so are the diagonal edges from
+(i, j) to (i-1, j-1) and (i+1, j-1).
+
+The infinite reverse edges force the source side S of every row to be a prefix of columns
+(if (i, j+1) is in S, so is (i, j)), so a finite cut crosses exactly one horizontal edge per
+row. The infinite diagonals stop that boundary from moving more than one column between
+adjacent rows, so the removed pixels form a connected seam. After max-flow, a BFS from the
+source over edges with remaining capacity gives S, and the rightmost pixel of S in each row is
+removed. By the max-flow min-cut theorem the flow value equals the capacity of this cut, which
+is the seam's cost, so the seam is the cheapest one the graph can represent.
+
+One consequence of this construction: a last-column pixel is joined to the sink by an infinite
+edge, so it can never be in S, and the seam can only use columns 0 to n-2. Graph cut therefore
+finds the optimal seam of the image without its last column. It matches DP whenever DP's
+optimal seam avoids the last column, and costs more when it does not (section 4.2). The forward
+option uses only the |I(i, j+1) - I(i, j-1)| term suggested in the brief, which is not the same
+objective as DP's forward mode, so all comparisons use backward energy, the default for both.
+
+`MaxFlow.cpp` implements Edmonds-Karp (augment along a BFS shortest path until none remains)
+and Dinic (BFS level graph, then a blocking flow using per-node edge pointers); the viewer can
+use either, and Dinic is the default. Dinic's DFS is iterative because augmenting paths in a
+seam graph can contain thousands of nodes, enough to overflow the stack with recursion.
+Residual capacities at or below 1e-9 count as zero, to absorb floating-point rounding.
+
+`tests/src/q4.cpp` checks the CLRS Figure 26.1 network (flow 23 and the cut {s, v1, v2, v4})
+with both algorithms, and 300 random networks against a brute-force minimum over every s-t cut.
+For seams, it compares every map size up to 6x6 against exhaustive enumeration of the seams
+that avoid the last column, larger random maps against DP on the map without its last column,
+and the forward option against a backward run on the |I(i, j+1) - I(i, j-1)| values. It also
+checks that the last column is never removed but the first can be, a diagonal seam, a cheap but
+disconnected path that must be rejected, and the Carver in both orientations.
 
 ## 2. Questions (Item 2)
 
@@ -104,8 +141,18 @@ values; it does not use divide and conquer or FFTs.
 | DP | O(HW) | O(kHW) | O(HW) parents (+ O(W) costs with rolling rows) |
 | Greedy | O(H) | O(kH), but O(kHW) overall because energy is recomputed | O(H) for the seam |
 | Greedy, all starts | O(HW) | O(kHW) | O(H) |
-| Graph cut (Edmonds–Karp) | | | |
-| Graph cut (Dinic) | | | |
+| Graph cut (Edmonds–Karp) | O(VE^2) = O((HW)^3) worst case | O(k(HW)^3) | O(HW): about 6HW edge records |
+| Graph cut (Dinic) | O(V^2 E) = O((HW)^3) worst case; measured growth about (HW)^1.6 | O(k(HW)^3) | O(HW), same graph |
+
+For graph cut, V = HW + 2 and E = Θ(HW): each pixel has at most one right edge and two
+diagonals, each stored with a residual twin, plus the source and sink edges. Because the graph
+is sparse, the general bounds O(VE^2) for Edmonds-Karp and O(V^2 E) for Dinic both become
+O(V^3) = O((HW)^3) per seam.
+
+The measured growth rates come from fitting log(find time) against log(pixels) over the
+100, 150 and 200 px runs in section 4.2: DP 1.03 (linear, as expected), greedy 0.64 (it
+touches one pixel per row, and H grows like (HW)^0.5 at a fixed aspect ratio) and graph cut
+with Dinic 1.63. Max-flow is far below its worst case on these grids, but clearly superlinear.
 
 ## 4. Comparison: DP vs Greedy vs Graph Cut
 <!-- Seam cost, visual quality (images from results/), running time graphs from results/bench.csv. -->
@@ -135,6 +182,40 @@ Observations (draft, to be written up):
   Backward energy ignores the new edges created by a removal; forward energy is designed
   to fix exactly this (worth showing as an improvement in section 5).
 
+### 4.2 DP vs Graph cut (Question 4)
+Measured with g++ 13.3 `-O2` on Linux (2-core Xeon, 2.1 GHz): 30 vertical seams removed,
+Gradient energy, graph cut with Dinic, median of 3 runs. This is a different machine and
+compiler from section 4.1, so compare ratios across the two tables, not absolute times. The
+input is the tower image from the assignment brief (`assets/images/tower.jpg`), scaled so the
+longer side is the given size. Summary data: `docs/data/q4-bench-summary.csv`. Reproduce with
+`seam_bench --image assets/images/tower.jpg --sizes 100,150,200 --seams 30 --algos dp,greedy,graphcut`.
+
+| Size | DP find per seam (ms) | Graph cut find per seam (ms) | Graph cut ÷ DP time | DP total seam cost | Graph cut total seam cost | Graph cut ÷ DP cost |
+|---|---|---|---|---|---|---|
+| 100x68 | 0.028 | 24.7 | 868x | 23,308 | 24,013 | 1.030 |
+| 150x102 | 0.068 | 90.4 | 1,329x | 24,090 | 24,808 | 1.030 |
+| 200x136 | 0.118 | 237.3 | 2,019x | 25,316 | 25,832 | 1.020 |
+
+![Tower: 70 seams removed by DP, greedy and graph cut](figures/q4-tower-dp-greedy-graphcut.png)
+
+Observations:
+- **Nearly the same seams as DP, slightly more expensive.** Graph cut's total seam cost is
+  2.0-3.0% higher than DP's. The reason is the last column: many of DP's seams on this image
+  run down the right-hand edge of the sky, but graph cut cannot remove the last column, so it
+  takes the next-cheapest seams instead. Removing 70 seams from the full 274x186 tower, only 262
+  of the 13,020 removed pixels (2%) differ from DP's, and the results look the same. On maps
+  where it is allowed the same columns, graph cut matches DP's cost exactly (tested).
+- **Graph cut is far slower.** Per seam it is 868-2,019x slower than DP, and the gap grows with
+  the image because DP is linear in the number of pixels while max-flow grew like about
+  (HW)^1.6 here. DP visits each pixel once with three comparisons; graph cut builds a graph of
+  about 6HW edge records and runs max-flow on it for every seam.
+- **Greedy, for reference**, costs 2.0-2.9x as much energy as DP, and its seams cut through the
+  central tower, while DP and graph cut take theirs from the sky and the right-hand side.
+- **When graph cut is worth it.** For a single image it gives no quality advantage over DP and
+  costs orders of magnitude more time. Its value is generality: Rubinstein et al. (2008) use a
+  min-cut construction for video, where a seam becomes a connected surface through all frames
+  and the row-by-row DP recurrence no longer applies.
+
 ## 5. Improvements
 ### 5.1 Do we need the entire DP table?
 ### 5.2 Does multi-threading help?
@@ -144,3 +225,6 @@ Observations (draft, to be written up):
 - S. Avidan, A. Shamir. *Seam Carving for Content-Aware Image Resizing.* SIGGRAPH 2007.
 - M. Rubinstein, A. Shamir, S. Avidan. *Improved Seam Carving for Video Retargeting.* SIGGRAPH 2008.
 - Cormen et al. *Introduction to Algorithms*, Problem 15-8 (Image compression by seam carving).
+- Cormen et al. *Introduction to Algorithms*, Chapter 26 (Maximum flow: Ford-Fulkerson, Edmonds-Karp, max-flow min-cut theorem).
+- E. A. Dinic. *Algorithm for Solution of a Problem of Maximum Flow in a Network with Power Estimation.* Soviet Math. Doklady, 1970.
+- J. Edmonds, R. M. Karp. *Theoretical Improvements in Algorithmic Efficiency for Network Flow Problems.* JACM, 1972.

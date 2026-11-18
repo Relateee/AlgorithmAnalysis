@@ -83,10 +83,9 @@ void SeamApp::drawControls() {
     ImGui::TextDisabled("Tip: drag an image file onto the window.");
 
     ImGui::SeparatorText("Algorithm");
-    // Indices match seam::Algorithm. Graph Cut stays disabled until Question 4 is implemented.
-    static const char* kFinders[] = {"Dynamic Programming", "Greedy",
-                                     "Graph Cut (Question 4: pending)"};
-    constexpr int kImplementedFinders = 2;
+    // Indices match seam::Algorithm.
+    static const char* kFinders[] = {"Dynamic Programming", "Greedy", "Graph Cut (max-flow)"};
+    constexpr int kImplementedFinders = 3;
     if (ImGui::BeginCombo("Seam finder", kFinders[algorithm_])) {
         for (int i = 0; i < IM_ARRAYSIZE(kFinders); ++i) {
             ImGui::BeginDisabled(i >= kImplementedFinders);
@@ -113,7 +112,9 @@ void SeamApp::drawControls() {
     } else {
         ImGui::Checkbox("Forward energy##gc", &gcForward_);
         ImGui::Combo("Max-flow", &gcMaxFlow_, "Edmonds-Karp\0Dinic\0");
-        ImGui::TextWrapped("Graph cut is slow: try images around 200 px.");
+        ImGui::Checkbox("Preview: compare with DP##gc", &compareDp_);
+        ImGui::TextWrapped("Graph cut runs one max-flow per seam, so it is slow: "
+                           "try images around 100-200 px and a few seams.");
     }
 
     ImGui::SeparatorText("Target size");
@@ -209,8 +210,8 @@ void SeamApp::previewSeams() {
         const auto energy = static_cast<seam::EnergyType>(energy_);
         overlay_ = original_.clone();
 
-        // Question 3 comparison: draw DP's seams first (green) so the greedy seams sit on top.
-        const bool compare = algorithm_ == static_cast<int>(seam::Algorithm::Greedy) && compareDp_;
+        // Questions 3/4 comparison: draw DP's seams first (green) so the other seams sit on top.
+        const bool compare = algorithm_ != static_cast<int>(seam::Algorithm::DP) && compareDp_;
         double dpVertical = 0, dpHorizontal = 0;
         if (compare) {
             seam::Carver dp(seam::makeSeamFinder(seam::Algorithm::DP, finderOptions()), energy);
@@ -238,9 +239,10 @@ void SeamApp::previewSeams() {
         if (compare) {
             char buf[256];
             std::snprintf(buf, sizeof(buf),
-                          "\nGreen = DP seams.\nVertical cost:   greedy %.1f vs DP %.1f\n"
-                          "Horizontal cost: greedy %.1f vs DP %.1f",
-                          vertical, dpVertical, horizontal, dpHorizontal);
+                          "\nGreen = DP seams.\nVertical cost:   %s %.1f vs DP %.1f\n"
+                          "Horizontal cost: %s %.1f vs DP %.1f",
+                          seam::toString(static_cast<seam::Algorithm>(algorithm_)), vertical, dpVertical,
+                          seam::toString(static_cast<seam::Algorithm>(algorithm_)), horizontal, dpHorizontal);
             status_ += buf;
         }
     } catch (const std::exception& e) {

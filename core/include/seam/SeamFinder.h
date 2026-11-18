@@ -34,7 +34,7 @@ struct GreedyOptions {
 };
 
 struct GraphCutOptions {
-    bool             forwardEnergy = true;
+    bool             forwardEnergy = false; // backward (pixel) energy by default, like DP
     MaxFlowAlgorithm maxFlow       = MaxFlowAlgorithm::Dinic;
 };
 

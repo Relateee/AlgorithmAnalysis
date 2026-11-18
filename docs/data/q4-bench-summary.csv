@@ -1,0 +1,10 @@
+image,algorithm,width,height,runs,median_ms_total,median_ms_find,median_ms_find_per_seam,total_seam_cost
+tower,DP,100,68,3,1.3715,0.8536,0.02845,23308
+tower,Greedy,100,68,3,0.4843,0.0269,0.0009,46090
+tower,GraphCut,100,68,3,742.157,740.756,24.69187,24013
+tower,DP,150,102,3,3.1928,2.0403,0.06801,24090
+tower,Greedy,150,102,3,1.1603,0.049,0.00163,69277
+tower,GraphCut,150,102,3,2713.26,2711.18,90.37267,24808
+tower,DP,200,136,3,5.4672,3.5263,0.11754,25316
+tower,Greedy,200,136,3,1.9936,0.0647,0.00216,68255
+tower,GraphCut,200,136,3,7122.96,7119.41,237.31367,25832

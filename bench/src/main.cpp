@@ -3,6 +3,8 @@
 //   seam_bench [--image path] [--out file.csv] [--seams N] [--sizes 100,200,400]
 //              [--algos dp,greedy,graphcut] [--energy gradient|sobel] [--save-images]
 //
+// Graph cut runs one max-flow per seam, so keep sizes small (100-200) for it.
+//
 // Always benchmark the Release build.
 
 #include <seam/Carver.h>
@@ -83,7 +85,9 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    fs::create_directories(fs::path(args.out).parent_path());
+    // A bare file name has no parent directory, and create_directories("") throws.
+    if (const fs::path dir = fs::path(args.out).parent_path(); !dir.empty())
+        fs::create_directories(dir);
     std::ofstream csv(args.out);
     csv << "algorithm,energy,width,height,seams,ms_energy,ms_find,ms_remove,ms_total,"
            "total_seam_cost\n";

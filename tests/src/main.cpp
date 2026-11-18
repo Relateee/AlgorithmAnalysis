@@ -1,5 +1,5 @@
-// Minimal self-contained tests (no framework needed). Several FAIL until the TODOs are done -
-// that's intended: they tell you when each piece works.
+// Minimal self-contained smoke tests across all three finders (no framework needed).
+// The detailed suites are q1.cpp (DP), q3.cpp (greedy) and q4.cpp (max-flow / graph cut).
 
 #include <seam/Carver.h>
 #include <seam/Energy.h>
@@ -64,15 +64,18 @@ void dpNeverWorseThanGreedy() {
 
 void graphCutMatchesDP() {
     // Graph cut with plain energy must find a seam of the same (optimal) cost as DP.
+    // The brief wires the last column to the sink, so graph-cut seams cannot use it:
+    // compare with DP on the map without its last column.
     seam::FinderOptions o;
     o.graphCut.forwardEnergy = false;
     for (unsigned seed = 0; seed < 5; ++seed) {
-        const cv::Mat e    = randomEnergy(15, 12, seed);
-        const cv::Mat gray = cv::Mat::zeros(e.size(), CV_32F);
-        const auto    gc   = seam::makeSeamFinder(seam::Algorithm::GraphCut, o)
-                              ->findVerticalSeam({e, gray});
+        const cv::Mat e     = randomEnergy(15, 12, seed);
+        const cv::Mat inner = e.colRange(0, e.cols - 1).clone();
+        const cv::Mat gray  = cv::Mat::zeros(e.size(), CV_32F);
+        const auto    gc    = seam::makeSeamFinder(seam::Algorithm::GraphCut, o)
+                               ->findVerticalSeam({e, gray});
         CHECK(std::abs(seam::seamCost(e, gc) -
-                       seam::seamCost(e, find(seam::Algorithm::DP, e))) < 1e-3);
+                       seam::seamCost(inner, find(seam::Algorithm::DP, inner))) < 1e-3);
     }
 }
 

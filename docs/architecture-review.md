@@ -86,3 +86,12 @@ DP and seam removal, fix UI/state and transpose issues, add verification, and do
 The main user prompt asked to check the architecture/UI, verify the teammate's breakdown,
 and complete the first question. Adapt this record to include subsequent assistance and the
 team's own verification; it is not a complete declaration for the entire project.
+
+Question 4 (added 2026-11-18): AI assistance was used to implement Edmonds-Karp, Dinic and
+the residual min-cut search in `MaxFlow.cpp`, build the graph-cut network in
+`GraphCutSeamFinder.cpp` as described in the brief, write `tests/src/q4.cpp`, enable Graph Cut
+in the viewer, run the DP / greedy / graph-cut measurements and write sections 1 (Graph cut),
+3 (graph-cut rows) and 4.2 of the report. Main prompts: "can u write them up" (asking for the
+missing Question 4 graph cut and max-flow work after a review of the assignment against the
+brief and rubric) and "can u remove all that my assignment doesnt ask for" (which removed
+extras beyond the brief and switched to the brief's exact graph construction).

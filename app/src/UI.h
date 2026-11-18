@@ -40,8 +40,8 @@ private:
     bool dpRolling_  = false;
     int  dpThreads_  = 1;
     bool greedyAll_  = false;
-    bool compareDp_  = true;  // preview: also draw the DP seams in green (Question 3)
-    bool gcForward_  = true;
+    bool compareDp_  = true;  // preview: also draw the DP seams in green (Questions 3/4)
+    bool gcForward_  = false; // same objective as DP by default
     int  gcMaxFlow_  = 1; // 0 = Edmonds-Karp, 1 = Dinic
 
     // State
