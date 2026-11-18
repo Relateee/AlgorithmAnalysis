@@ -26,7 +26,7 @@ public:
 struct DPOptions {
     bool forwardEnergy = false; // use forwardCosts() instead of the plain energy map
     bool rollingRows   = false; // keep only 2 rows of cumulative cost (+ parent table)
-    int  threads       = 1;     // split each row across threads
+    int  threads       = 1;     // reserved for section 5d; currently only 1 is supported
 };
 
 struct GreedyOptions {

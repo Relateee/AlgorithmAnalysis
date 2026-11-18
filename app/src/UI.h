@@ -17,6 +17,8 @@ public:
     // Loads an image from disk (Load button, Browse dialog, or drag-and-drop onto the window).
     bool loadFromPath(const std::string& path);
     void useDemoImage();
+    // Exercises the real load/preview/carve/texture path in a hidden GL window.
+    void smokeTest(const std::string& outputDirectory);
 
 private:
     void drawControls();
@@ -25,6 +27,7 @@ private:
     void setImage(const cv::Mat& img);
     void previewSeams();
     void carve();
+    void refreshEnergy();
     seam::FinderOptions finderOptions() const;
 
     // Inputs
@@ -46,6 +49,7 @@ private:
     cv::Mat          result_;
     Texture          originalTex_;
     Texture          resultTex_;
+    Texture          energyTex_;
     seam::CarveStats lastStats_;
     std::string      status_;
 };

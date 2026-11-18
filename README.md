@@ -4,6 +4,11 @@ Content-aware image resizing implemented three ways: **Dynamic Programming**, **
 **Graph Cut (min-cut / max-flow)**. OpenCV is used only for image I/O and basic Mat operations;
 the seam-carving logic is implemented from scratch.
 
+**Current status:** Question 1 (DP, vertical and horizontal seams) is implemented.
+Greedy, Graph Cut and max-flow are still scaffolds for Questions 3/4. The viewer disables
+these choices until they are implemented. Forward energy and rolling cost rows work;
+multi-threaded DP remains pending. See [the architecture review](docs/architecture-review.md).
+
 ## Layout
 | Folder | What |
 |---|---|
@@ -24,7 +29,7 @@ the seam-carving logic is implemented from scratch.
 **Visual Studio:** File → Open → Folder… → select this folder, pick the `x64 Debug` or
 `x64 Release` preset, then Build → Build All. Choose `seam_app.exe` as the startup item.
 
-**Command line** (from a *Developer PowerShell for VS 2026*, which sets `VCPKG_ROOT`):
+**Command line** (from a *Developer PowerShell for VS 2026*, with `VCPKG_ROOT` set):
 ```
 cmake --preset x64-release
 cmake --build --preset x64-release
@@ -33,7 +38,49 @@ ctest --preset x64-release
 
 Use the **Release** build for all timing measurements.
 
+If `VCPKG_ROOT` is not set, set it for the current PowerShell session before configuring:
+```powershell
+$env:VCPKG_ROOT = 'C:\Program Files\Microsoft Visual Studio\18\Community\VC\vcpkg'
+```
+Adjust that path for your Visual Studio installation. A Developer PowerShell provides
+the compiler environment but may not set `VCPKG_ROOT`.
+
+The solution preset also works from an ordinary PowerShell after setting `VCPKG_ROOT`:
+```powershell
+cmake --preset vs2026
+cmake --build --preset vs2026-release
+ctest --preset vs2026-release -L q1
+```
+The Question 1 suite checks 960 DP option combinations against exhaustive search,
+Sobel against an independent filter implementation, exact retained pixels, horizontal
+seams, repeated energy recalculation, small images and invalid inputs.
+Running CTest without `-L q1` also runs the original suite: its max-flow and graph-cut
+checks are expected to fail until Questions 3/4 are completed. They remain enabled
+so unfinished work is visible.
+
+## Try Question 1
+
+Run `build/vs2026/app/Release/seam_app.exe` (or the equivalent Ninja build path).
+Load an image using Browse, a path, or drag-and-drop; the demo image works without assets.
+Select Gradient or Sobel and inspect the Energy map tab. Preview seams shows the first
+vertical seam in red and horizontal seam in blue on the original. Reduce Width and/or
+Height, click Carve, and open Result. Each carve starts from the original image and
+removes all requested vertical seams before the horizontal ones. Leave Forward energy
+off for the Question 1 minimum-sum-of-pixel-energies objective.
+
+A hidden-window UI check exercises the actual loading, preview, texture, resizing and
+rendering code and saves example outputs and a screenshot:
+```powershell
+build/vs2026/app/Release/seam_app.exe --smoke-test results/ui-smoke
+```
+It requires an OpenGL-capable desktop. Interactive carving is synchronous, so large
+resizes can temporarily stop the window responding. Step-by-step animation and saving
+from the viewer remain future enhancements.
+
 ## Run the benchmark
 ```
-out/build/x64-release/bench/seam_bench.exe --sizes 100,200,400 --seams 50 --save-images
+out/build/x64-release/bench/seam_bench.exe --image path/to/photo.jpg --algos dp --sizes 100,200,400 --seams 50 --save-images
 ```
+Supply an image: `assets/images/sample.jpg` is not bundled. Include only `dp` until
+the remaining algorithms are implemented; their current placeholders produce invalid
+comparison results. For the solution preset, use `build/vs2026/bench/Release/seam_bench.exe`.

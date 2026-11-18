@@ -1,7 +1,40 @@
 # Seam Carving: Analysis and Discussion
 
 ## 1. Implementation overview
-<!-- Energy function(s), DP, greedy and graph-cut implementations; how horizontal seams are handled. -->
+Question 1 is implemented in the UI-independent `seamcore` library. `Energy.cpp` converts
+BGR input to grayscale intensity and computes either central-difference energy
+`|I(r,c+1)-I(r,c-1)| + |I(r+1,c)-I(r-1,c)|` or the absolute sum of two handwritten
+3x3 Sobel responses. Both replicate the nearest pixel at image boundaries.
+
+`DPSeamFinder.cpp` initializes cumulative costs from the first energy row. Each later
+pixel adds its energy to the minimum reachable cost in the preceding row (up-left,
+up or up-right). A parent table records the chosen predecessor. Backtracking from the
+lowest cost in the final row returns one connected pixel per row. Equal costs select
+the leftmost predecessor and final column deterministically.
+
+`Carver.cpp` removes each selected pixel by copying the remaining pixels in that row.
+It recomputes the energy map and seam after every removal. Horizontal finding transposes
+the image and reuses the vertical algorithm; horizontal removal transposes back afterward.
+Resizing removes all requested vertical seams, then all requested horizontal seams.
+Targets must be positive and no larger than the original. These operations shrink images;
+seam insertion is not implemented.
+
+For an H by W image, energy computation, DP and removal each take O(HW) time per seam.
+The baseline cost and parent tables each take O(HW) space. Rolling cost rows reduce cost
+storage to O(W), with O(HW) parent storage still required for backtracking. Removing k
+seams takes at most O(kHW) time, with smaller images in successive iterations. Each
+individual backward-energy seam is optimal for the current image; the complete sequence
+of removals and the chosen vertical-then-horizontal order are not claimed globally optimal.
+
+The default mode minimizes the requested sum of pixel energies. An optional forward
+mode uses the first-row pixel energy and then the CL/CU/CR transition costs documented
+in `Energy.h`; it optimizes a different objective. `CarveStats.totalSeamCost` always reports
+the sum of backward pixel energies, including when forward mode is enabled.
+
+Validation includes exhaustive enumeration on small maps, both energy filters,
+horizontal and vertical seams, exact retained pixels, boundary cases and a controlled
+test that verifies energy is recalculated after each removal. See `tests/src/q1.cpp`.
+Greedy, Graph Cut, multi-threading and the remaining analysis below still require work.
 
 ## 2. Questions (Item 2)
 

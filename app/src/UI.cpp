@@ -11,8 +11,11 @@
 #include <opencv2/imgcodecs.hpp>
 
 #include <cstdint>
+#include <algorithm>
 #include <cstdio>
 #include <exception>
+#include <filesystem>
+#include <stdexcept>
 
 namespace {
 
@@ -26,8 +29,12 @@ void showImage(const Texture& tex) {
         return;
     }
     ImGui::Text("%d x %d", tex.width(), tex.height());
-    ImGui::Image(toImTexture(tex), ImVec2(static_cast<float>(tex.width()),
-                                          static_cast<float>(tex.height())));
+    const ImVec2 available = ImGui::GetContentRegionAvail();
+    const float width = static_cast<float>(tex.width());
+    const float height = static_cast<float>(tex.height());
+    const float scale = std::min({1.f, std::max(1.f, available.x) / width,
+                                      std::max(1.f, available.y) / height});
+    ImGui::Image(toImTexture(tex), ImVec2(width * scale, height * scale));
 }
 
 } // namespace
@@ -35,7 +42,7 @@ void showImage(const Texture& tex) {
 SeamApp::SeamApp() {
     // Default: assets/images/sample.jpg if you've added one, otherwise the built-in demo scene.
     std::snprintf(path_, sizeof(path_), "%s/images/sample.jpg", SEAM_ASSETS_DIR);
-    if (!loadFromPath(path_))
+    if (!std::filesystem::is_regular_file(path_) || !loadFromPath(path_))
         useDemoImage();
 }
 
@@ -76,13 +83,24 @@ void SeamApp::drawControls() {
     ImGui::TextDisabled("Tip: drag an image file onto the window.");
 
     ImGui::SeparatorText("Algorithm");
-    ImGui::Combo("Seam finder", &algorithm_, "Dynamic Programming\0Greedy\0Graph Cut\0");
-    ImGui::Combo("Energy", &energy_, "Gradient\0Sobel\0");
+    if (ImGui::BeginCombo("Seam finder", "Dynamic Programming")) {
+        ImGui::Selectable("Dynamic Programming", true);
+        ImGui::BeginDisabled();
+        ImGui::Selectable("Greedy (Question 3: pending)");
+        ImGui::Selectable("Graph Cut (Question 4: pending)");
+        ImGui::EndDisabled();
+        ImGui::EndCombo();
+    }
+    if (ImGui::Combo("Energy", &energy_, "Gradient\0Sobel\0") && !original_.empty())
+        refreshEnergy();
 
     if (algorithm_ == 0) {
         ImGui::Checkbox("Forward energy##dp", &dpForward_);
         ImGui::Checkbox("Rolling rows (5d)", &dpRolling_);
+        ImGui::BeginDisabled();
         ImGui::SliderInt("Threads (5d)", &dpThreads_, 1, 16);
+        ImGui::EndDisabled();
+        ImGui::TextDisabled("Multi-threading: pending (Question 5d).");
     } else if (algorithm_ == 1) {
         ImGui::Checkbox("Try all start columns", &greedyAll_);
     } else {
@@ -110,7 +128,7 @@ void SeamApp::drawControls() {
     ImGui::Text("Find    (ms)  : %.2f", lastStats_.msFind);
     ImGui::Text("Remove  (ms)  : %.2f", lastStats_.msRemove);
     ImGui::Text("Total   (ms)  : %.2f", lastStats_.msTotal());
-    ImGui::Text("Seam cost sum : %.1f", lastStats_.totalSeamCost);
+    ImGui::Text("Pixel energy sum : %.1f", lastStats_.totalSeamCost);
 
     if (!status_.empty())
         ImGui::TextWrapped("%s", status_.c_str());
@@ -129,6 +147,11 @@ void SeamApp::drawImages() {
         }
         if (ImGui::BeginTabItem("Result")) {
             showImage(resultTex_);
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("Energy map")) {
+            ImGui::TextDisabled("Brighter pixels have higher energy (normalized for display).");
+            showImage(energyTex_);
             ImGui::EndTabItem();
         }
         ImGui::EndTabBar();
@@ -157,10 +180,20 @@ void SeamApp::setImage(const cv::Mat& img) {
     original_ = img;
     overlay_  = img.clone();
     result_.release();
+    resultTex_.clear();
     targetW_  = img.cols;
     targetH_  = img.rows;
     lastStats_ = {};
     originalTex_.upload(overlay_);
+    refreshEnergy();
+}
+
+void SeamApp::refreshEnergy() {
+    const cv::Mat energy = seam::computeEnergy(seam::toGray(original_),
+                                               static_cast<seam::EnergyType>(energy_));
+    cv::Mat display;
+    cv::normalize(energy, display, 0, 255, cv::NORM_MINMAX, CV_8U);
+    energyTex_.upload(display);
 }
 
 void SeamApp::previewSeams() {
@@ -190,8 +223,41 @@ void SeamApp::carve() {
         result_    = carver.resize(original_, targetW_, targetH_);
         lastStats_ = carver.stats();
         resultTex_.upload(result_);
-        status_ = "Done.";
+        status_ = "Done. Open the Result tab to view the resized image.";
     } catch (const std::exception& e) {
         status_ = e.what();
     }
+}
+
+void SeamApp::smokeTest(const std::string& outputDirectory) {
+    namespace fs = std::filesystem;
+    fs::create_directories(outputDirectory);
+    const auto output = [&](const char* name) { return (fs::path(outputDirectory) / name).string(); };
+    const auto require = [](bool condition) {
+        if (!condition) throw std::runtime_error("UI smoke test failed");
+    };
+    require(cv::imwrite(output("input.png"), makeDemoImage(96, 64)));
+    require(loadFromPath(output("input.png")));
+    require(originalTex_.valid() && energyTex_.valid() && !resultTex_.valid());
+    for (int energy : {0, 1}) {
+        energy_ = energy;
+        refreshEnergy();
+        previewSeams();
+        require(lastStats_.seamsRemoved == 0 && overlay_.size() == original_.size());
+        require(status_ == "Red = vertical seam, blue = horizontal seam.");
+        targetW_ = 80;
+        targetH_ = 52;
+        carve();
+        require(result_.cols == 80 && result_.rows == 52);
+        require(lastStats_.seamsRemoved == 28);
+        require(resultTex_.width() == 80 && resultTex_.height() == 52);
+        require(cv::imwrite(output(energy == 0 ? "gradient.png" : "sobel.png"), result_));
+    }
+    require(cv::imwrite(output("seams.png"), overlay_));
+    require(loadFromPath(output("input.png")));
+    require(result_.empty() && !resultTex_.valid() && lastStats_.seamsRemoved == 0);
+    previewSeams();
+    targetW_ = 80;
+    targetH_ = 52;
+    carve();
 }

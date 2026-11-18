@@ -12,6 +12,7 @@ public:
 
     // Uploads a BGR (CV_8UC3) or grayscale (CV_8UC1) image, replacing any previous contents.
     void upload(const cv::Mat& img);
+    void clear();
 
     bool         valid()  const { return id_ != 0; }
     unsigned int id()     const { return id_; }

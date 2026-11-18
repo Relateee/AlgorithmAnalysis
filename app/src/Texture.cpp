@@ -9,8 +9,14 @@
 #endif
 
 Texture::~Texture() {
+    clear();
+}
+
+void Texture::clear() {
     if (id_ != 0)
         glDeleteTextures(1, &id_);
+    id_ = 0;
+    width_ = height_ = 0;
 }
 
 void Texture::upload(const cv::Mat& img) {

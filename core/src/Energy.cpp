@@ -2,9 +2,13 @@
 
 #include <opencv2/imgproc.hpp>
 
+#include <algorithm>
+#include <cmath>
+
 namespace seam {
 
 cv::Mat toGray(const cv::Mat& bgr) {
+    CV_Assert(!bgr.empty() && (bgr.channels() == 1 || bgr.channels() == 3));
     cv::Mat gray8, gray32;
     if (bgr.channels() == 3)
         cv::cvtColor(bgr, gray8, cv::COLOR_BGR2GRAY);
@@ -15,33 +19,54 @@ cv::Mat toGray(const cv::Mat& bgr) {
 }
 
 cv::Mat computeEnergy(const cv::Mat& gray, EnergyType type) {
-    CV_Assert(gray.type() == CV_32F);
+    CV_Assert(!gray.empty() && gray.type() == CV_32F);
     cv::Mat energy = cv::Mat::zeros(gray.size(), CV_32F);
 
-    switch (type) {
-        case EnergyType::Gradient:
-            // TODO(spec 1a): e(r, c) = |I(r, c+1) - I(r, c-1)| + |I(r+1, c) - I(r-1, c)|
-            //                Clamp to the border at the edges.
-            break;
-        case EnergyType::Sobel:
-            // TODO(spec 1a): apply 3x3 Sobel kernels by hand, e = |Gx| + |Gy|
-            break;
+    CV_Assert(type == EnergyType::Gradient || type == EnergyType::Sobel);
+    // Replicate the nearest border pixel, including for one-row/one-column images.
+    const auto intensity = [&](int r, int c) {
+        return gray.at<float>(std::clamp(r, 0, gray.rows - 1),
+                              std::clamp(c, 0, gray.cols - 1));
+    };
+    for (int r = 0; r < gray.rows; ++r) {
+        for (int c = 0; c < gray.cols; ++c) {
+            float gx, gy;
+            if (type == EnergyType::Gradient) {
+                gx = intensity(r, c + 1) - intensity(r, c - 1);
+                gy = intensity(r + 1, c) - intensity(r - 1, c);
+            } else {
+                // Sobel kernels [-1 0 1; -2 0 2; -1 0 1] and its transpose.
+                gx = intensity(r - 1, c + 1) + 2.f * intensity(r, c + 1)
+                   + intensity(r + 1, c + 1) - intensity(r - 1, c - 1)
+                   - 2.f * intensity(r, c - 1) - intensity(r + 1, c - 1);
+                gy = intensity(r + 1, c - 1) + 2.f * intensity(r + 1, c)
+                   + intensity(r + 1, c + 1) - intensity(r - 1, c - 1)
+                   - 2.f * intensity(r - 1, c) - intensity(r - 1, c + 1);
+            }
+            energy.at<float>(r, c) = std::abs(gx) + std::abs(gy);
+        }
     }
     return energy;
 }
 
 ForwardCosts forwardCosts(const cv::Mat& gray, int r, int c) {
-    // TODO: implement the CU / CL / CR formulas documented in Energy.h.
-    (void)gray;
-    (void)r;
-    (void)c;
-    return {0.f, 0.f, 0.f};
+    CV_Assert(!gray.empty() && gray.type() == CV_32F);
+    CV_Assert(r >= 0 && r < gray.rows && c >= 0 && c < gray.cols);
+    const float left = gray.at<float>(r, std::max(0, c - 1));
+    const float right = gray.at<float>(r, std::min(gray.cols - 1, c + 1));
+    const float above = gray.at<float>(std::max(0, r - 1), c);
+    const float up = std::abs(right - left);
+    return {up + std::abs(above - left), up, up + std::abs(above - right)};
 }
 
 double seamCost(const cv::Mat& energy, const Seam& seam) {
+    CV_Assert(!energy.empty() && energy.type() == CV_32F);
+    CV_Assert(static_cast<int>(seam.size()) == energy.rows);
     double sum = 0;
-    for (int r = 0; r < static_cast<int>(seam.size()); ++r)
+    for (int r = 0; r < static_cast<int>(seam.size()); ++r) {
+        CV_Assert(seam[r] >= 0 && seam[r] < energy.cols);
         sum += energy.at<float>(r, seam[r]);
+    }
     return sum;
 }
 
