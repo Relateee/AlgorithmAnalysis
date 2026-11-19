@@ -20,7 +20,8 @@ updates are implemented. Question 5 measurements are in section 5 of the report.
 | `tests/` | Self-contained tests (`seam_tests`) |
 | `assets/images/` | Input images: `tower.jpg` (from the brief); add `sample.jpg` to change the viewer's default |
 | `results/` | Benchmark CSVs and output images |
-| `docs/report.md` | Analysis and answers |
+| `docs/report.md` | Current analysis, answers, and benchmark results |
+| `docs/report-current.docx` | Word export of the current report; `docs/report.docx` is the earlier version |
 
 ## Requirements
 - Visual Studio 2026 with the **Desktop development with C++** workload (includes CMake, Ninja and vcpkg)

@@ -1,0 +1,10 @@
+algorithm,energy,width,height,seams,ms_energy,ms_find,ms_remove,ms_total,total_seam_cost,incremental,threads,rolling,maxflow,forward
+DP,Gradient,100,68,30,3.677,3.595,0.3173,7.5893,23308,0,1,0,dinic,0
+Greedy,Gradient,100,68,30,3.2636,0.033,0.1389,3.4355,46090,0,1,0,dinic,0
+GraphCut,Gradient,100,68,30,3.0187,742.829,0.3482,746.196,23308,0,1,0,dinic,0
+DP,Gradient,150,102,30,6.1717,5.6733,0.5494,12.3944,24090,0,1,0,dinic,0
+Greedy,Gradient,150,102,30,6.2988,0.0444,0.4906,6.8338,69277,0,1,0,dinic,0
+GraphCut,Gradient,150,102,30,6.9953,2557.69,0.7862,2565.47,24090,0,1,0,dinic,0
+DP,Gradient,200,136,30,12.6314,10.0947,1.0241,23.7502,25316,0,1,0,dinic,0
+Greedy,Gradient,200,136,30,13.6761,0.1026,1.0174,14.7961,68255,0,1,0,dinic,0
+GraphCut,Gradient,200,136,30,11.9762,6886.23,1.1574,6899.37,25316,0,1,0,dinic,0

@@ -64,18 +64,16 @@ void dpNeverWorseThanGreedy() {
 
 void graphCutMatchesDP() {
     // Graph cut with plain energy must find a seam of the same (optimal) cost as DP.
-    // The brief wires the last column to the sink, so graph-cut seams cannot use it:
-    // compare with DP on the map without its last column.
+    // Both algorithms can select any column.
     seam::FinderOptions o;
     o.graphCut.forwardEnergy = false;
     for (unsigned seed = 0; seed < 5; ++seed) {
         const cv::Mat e     = randomEnergy(15, 12, seed);
-        const cv::Mat inner = e.colRange(0, e.cols - 1).clone();
         const cv::Mat gray  = cv::Mat::zeros(e.size(), CV_32F);
         const auto    gc    = seam::makeSeamFinder(seam::Algorithm::GraphCut, o)
                                ->findVerticalSeam({e, gray});
         CHECK(std::abs(seam::seamCost(e, gc) -
-                       seam::seamCost(inner, find(seam::Algorithm::DP, inner))) < 1e-3);
+                       seam::seamCost(e, find(seam::Algorithm::DP, e))) < 1e-3);
     }
 }
 

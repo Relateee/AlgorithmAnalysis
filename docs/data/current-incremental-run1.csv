@@ -1,0 +1,4 @@
+algorithm,energy,width,height,seams,ms_energy,ms_find,ms_remove,ms_total,total_seam_cost,incremental,threads,rolling,maxflow,forward
+DP,Gradient,400,272,10,1.7944,11.292,3.0498,16.1362,8190,1,1,0,dinic,0
+DP,Gradient,800,543,10,5.6116,39.0113,11.7188,56.3417,9302,1,1,0,dinic,0
+DP,Gradient,1600,1086,10,23.2876,162.139,52.0287,237.456,8154,1,1,0,dinic,0

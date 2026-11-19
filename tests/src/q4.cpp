@@ -99,11 +99,7 @@ void invalidFlowRequests() {
 }
 
 // ---- graph-cut seams ------------------------------------------------------------------------
-// The brief joins the last column to the sink with infinite capacity, so a graph-cut seam can
-// only use columns 0 .. cols-2. The right reference is therefore the best seam of the energy
-// map without its last column.
-
-cv::Mat withoutLastColumn(const cv::Mat& m) { return m.colRange(0, m.cols - 1).clone(); }
+// Test against all valid image columns.
 
 // Independent reference: enumerate every connected seam (no DP, no graph).
 double exhaustiveCost(const cv::Mat& energy) {
@@ -135,26 +131,22 @@ double dpCost(const cv::Mat& energy) {
     return seam::seamCost(energy, seam::makeSeamFinder(seam::Algorithm::DP)->findVerticalSeam({energy, gray}));
 }
 
-bool avoidsLastColumn(const seam::Seam& s, int cols) {
-    return std::all_of(s.begin(), s.end(), [cols](int c) { return c <= cols - 2; });
-}
 
-// Every size up to 6x6, both max-flow algorithms: the seam is valid, never uses the last
-// column, and is as cheap as the exhaustive optimum (and DP) over the other columns.
+// Every size up to 6x6: compare both algorithms with exhaustive enumeration.
 void graphCutMatchesExhaustive() {
     for (int rows = 1; rows <= 6; ++rows) {
-        for (int cols = 2; cols <= 6; ++cols) {
+        for (int cols = 1; cols <= 6; ++cols) {
             for (unsigned seed = 0; seed < 6; ++seed) {
                 cv::Mat energy(rows, cols, CV_32F);
                 cv::RNG rng(seed * 97 + rows * 7 + cols);
                 rng.fill(energy, cv::RNG::UNIFORM, 0, 40);
                 const cv::Mat gray  = cv::Mat::zeros(energy.size(), CV_32F);
-                const cv::Mat inner = withoutLastColumn(energy);
+                const cv::Mat inner = energy;
                 const double  best  = exhaustiveCost(inner);
                 check(std::abs(dpCost(inner) - best) < 1e-3);
                 for (const auto algo : kFlows) {
                     const seam::Seam s = graphCut(energy, gray, false, algo);
-                    check(seam::isValidSeam(s, rows, cols) && avoidsLastColumn(s, cols));
+                    check(seam::isValidSeam(s, rows, cols));
                     check(std::abs(seam::seamCost(energy, s) - best) < 1e-3);
                     check(seam::seamCost(energy, s) >= dpCost(energy) - 1e-3); // never beats DP
                 }
@@ -163,15 +155,14 @@ void graphCutMatchesExhaustive() {
     }
 }
 
-// Larger random maps (too big to enumerate): graph cut matches DP on the map without its last
-// column.
+// Larger random maps: compare against DP on the complete map.
 void graphCutMatchesDPOnLargerMaps() {
     for (unsigned seed = 0; seed < 20; ++seed) {
         cv::Mat energy(25 + seed, 18 + seed % 7, CV_32F);
         cv::RNG rng(seed + 1000);
         rng.fill(energy, cv::RNG::UNIFORM, 0, 255);
         const cv::Mat gray = cv::Mat::zeros(energy.size(), CV_32F);
-        const double  best = dpCost(withoutLastColumn(energy));
+        const double  best = dpCost(energy);
         for (const auto algo : kFlows)
             check(std::abs(seam::seamCost(energy, graphCut(energy, gray, false, algo)) - best) < 1e-2);
     }
@@ -194,15 +185,14 @@ void forwardEnergyUsesNeighbourDifference() {
     }
 }
 
-// As in the brief, the last column is wired to the sink and can never be removed, even when
-// it is the cheapest path. The first column can be.
-void lastColumnIsNeverRemoved() {
+// Both image edges can be selected when they have the lowest energy.
+void bothEdgeColumnsCanBeRemoved() {
     cv::Mat energy(8, 6, CV_32F, cv::Scalar(50));
     energy.col(5).setTo(0);
     const cv::Mat gray = cv::Mat::zeros(energy.size(), CV_32F);
     for (const auto algo : kFlows) {
         const seam::Seam s = graphCut(energy, gray, false, algo);
-        check(avoidsLastColumn(s, 6) && seam::seamCost(energy, s) == 8 * 50.0);
+        check(s == seam::Seam(8, 5) && seam::seamCost(energy, s) == 0);
     }
     energy.setTo(50);
     energy.col(0).setTo(0);
@@ -231,7 +221,7 @@ void rejectsDisconnectedCheapPath() {
     for (const auto algo : kFlows) {
         const seam::Seam s = graphCut(energy, gray, false, algo);
         check(seam::isValidSeam(s, 4, 6));
-        check(std::abs(seam::seamCost(energy, s) - exhaustiveCost(withoutLastColumn(energy))) < 1e-6);
+        check(std::abs(seam::seamCost(energy, s) - exhaustiveCost(energy)) < 1e-6);
     }
 }
 
@@ -252,8 +242,9 @@ void carverWithGraphCut() {
                 ref.resetStats();
                 const seam::Seam s = gc.findSeam(image, orient);
                 ref.findSeam(image, orient);
-                check(avoidsLastColumn(s, orient == seam::Orientation::Vertical ? image.cols : image.rows));
-                check(gc.stats().totalSeamCost >= ref.stats().totalSeamCost - 1e-3);
+                check(seam::isValidSeam(s, orient == seam::Orientation::Vertical ? image.rows : image.cols,
+                                        orient == seam::Orientation::Vertical ? image.cols : image.rows));
+                check(std::abs(gc.stats().totalSeamCost - ref.stats().totalSeamCost) < 1e-3);
             }
             const cv::Mat out = gc.resize(image, 26, 21);
             check(out.cols == 26 && out.rows == 21 && out.type() == image.type());
@@ -270,10 +261,10 @@ int main() {
              {"max-flow: CLRS example, both algorithms, min cut side", clrsExample},
              {"max-flow = brute-force min cut on 300 random networks", randomNetworksMatchBruteForceMinCut},
              {"max-flow rejects source == sink", invalidFlowRequests},
-             {"graph cut = exhaustive optimum without the last column (all sizes to 6x6)", graphCutMatchesExhaustive},
-             {"graph cut = DP without the last column on larger maps", graphCutMatchesDPOnLargerMaps},
+             {"graph cut = exhaustive optimum (all sizes to 6x6)", graphCutMatchesExhaustive},
+             {"graph cut = DP on larger maps", graphCutMatchesDPOnLargerMaps},
              {"forward option uses |I(r,c+1) - I(r,c-1)|", forwardEnergyUsesNeighbourDifference},
-             {"last column never removed, first column can be", lastColumnIsNeverRemoved},
+             {"both edge columns can be removed", bothEdgeColumnsCanBeRemoved},
              {"follows a diagonal zero-cost seam", followsDiagonalPath},
              {"ignores a cheap but disconnected path", rejectsDisconnectedCheapPath},
              {"carver: both orientations, both energies, resize", carverWithGraphCut}}) {
